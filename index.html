@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -559,10 +560,8 @@ function openPlayerPage(pid) {
       <div class="sub-line"><span>${c.receiving.rec}/${c.receiving.tgt} targets</span><span></span></div></div>`;
   }
   if (c.defense) {
-    const seasonsLabel = (c.first_season && c.last_season) ? `${c.first_season}\u2013${c.last_season}` : '';
-    vitals += `<div class="receipt-row"><div class="top-line"><span class="name" style="cursor:default;text-decoration:none;">Seasons</span><span class="val">${seasonsLabel} (${c.games} games)</span></div></div>`;
     vitals += `<div class="receipt-row"><div class="top-line"><span class="name" style="cursor:default;text-decoration:none;">Defense</span><span class="val">${c.defense.sacks} sacks, ${c.defense.tfl} TFL</span></div>
-      <div class="sub-line"><span>${c.defense.qb_hits} QB hits, ${c.defense.pd} PD, ${c.defense.ints} INT</span><span></span></div></div>`;
+      <div class="sub-line"><span>${c.defense.qb_hits} QB hits, ${c.defense.pd} PD, ${c.defense.ints} INT</span></div></div>`;
   }
 
   content.innerHTML = `
