@@ -175,6 +175,9 @@
   }
   .search-result-row:hover { background: rgba(20,33,61,0.06); }
   .search-result-row .meta { color: var(--ink-soft); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  .about-section { padding: 72px 0 88px; max-width: 620px; }
+  .about-section p { color: rgba(250,246,236,0.85); font-size: 16px; line-height: 1.7; margin-bottom: 18px; }
+  .about-section p:last-child { margin-bottom: 0; }
   .search-empty { padding: 14px 16px; font-size: 13px; color: var(--ink-soft); }
 
   /* ---- daily trivia ---- */
@@ -242,7 +245,7 @@
     <div class="links">
       <a href="#browse-section">Browse</a>
       <a href="#finder-section">Play finder</a>
-      <a href="#">About</a>
+      <a href="#about-section">About</a>
     </div>
   </nav>
 
@@ -278,6 +281,18 @@
         <div class="receipt" id="finder-receipt"></div>
       </div>
     </div>
+  </div>
+
+  <div class="about-section" id="about-section">
+    <div class="section-head">
+      <h2>About Receipts</h2>
+    </div>
+    <p>This started on a couch, watching football with my grandfather.</p>
+    <p>Something wild would happen and one of us would ask "how many times has that happened?" We'd look it up. It wasn't anywhere. Every stats site had the basics. Nobody had the weird stuff, the kind that actually starts an argument.</p>
+    <p>So I built it myself.</p>
+    <p>Real NFL play-by-play data, every regular season play since 1999, checked against real published stats until the numbers actually held up. No guessing. Receipts.</p>
+    <p>I'm a Seahawks fan, for what it's worth. This is a one-person project, still growing, and it's built for anyone who's ever asked the same question we did on that couch.</p>
+    <p>Found something wrong, or got an idea for a stat nobody's tracked? Tell me. That's how this started.</p>
   </div>
 
   <footer>receipts. Built from real nflverse play-by-play data, not vibes.</footer>
