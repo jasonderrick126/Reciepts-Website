@@ -230,6 +230,13 @@
     .hero, .finder-inner { grid-template-columns: 1fr; }
     .hero h1 { font-size: 38px; }
     .grid { grid-template-columns: 1fr; }
+
+    /* Nav: stack into two clean rows instead of cramming wordmark + search +
+       links into one row that's too narrow to fit all three. */
+    nav { flex-wrap: wrap; row-gap: 16px; }
+    nav .links { gap: 18px; font-size: 14px; }
+    .search-wrap { width: 100%; order: 3; }
+    .search-results { width: 100%; left: 0; right: 0; }
   }
 </style>
 </head>
