@@ -647,7 +647,7 @@ function render() {
   const matches = active.length === 0
     ? STATS
     : STATS.filter(s => active.every(tag => s.tags.includes(tag)));
-  currentMatches = matches.slice(0, 9);
+  currentMatches = matches;
   grid.innerHTML = currentMatches.map((s, i) => cardHTML(s, i)).join('') ||
     '<p style="color: rgba(250,246,236,0.6); grid-column: 1 / -1;">No stats match that combination yet — try fewer filters.</p>';
 }
