@@ -631,6 +631,18 @@ async function generateShareImage(type, data) {
     return lines;
   }
 
+  function truncateText(text, font, maxWidth) {
+    ctx.font = font;
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let lo = 0, hi = text.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (ctx.measureText(text.slice(0, mid) + '…').width <= maxWidth) lo = mid;
+      else hi = mid - 1;
+    }
+    return text.slice(0, lo) + '…';
+  }
+
   // Small label
   ctx.fillStyle = AMBER_DEEP;
   ctx.font = "600 26px 'IBM Plex Mono'";
@@ -669,16 +681,26 @@ async function generateShareImage(type, data) {
   // like the actual site's leaderboard rows rather than generic stat lines.
   const rows = data.rows.slice(0, 5);
   const rowHeight = Math.min(105, Math.floor((cardBottom - 90 - cursorY) / Math.max(rows.length, 1)));
+  const nameFont = "700 34px 'Inter'";
+  const valueFont = "700 34px 'IBM Plex Mono'";
   for (const row of rows) {
     // Rank badge
     ctx.fillStyle = AMBER;
     ctx.font = "700 30px 'IBM Plex Mono'";
     ctx.fillText(String(row.rank), padX, cursorY + 34);
 
-    // Name
+    // Value, right-aligned -- measured FIRST, so the name knows exactly how
+    // much room it actually has and never runs into it (a long title left
+    // unbounded here once bled straight through the value column).
+    ctx.font = valueFont;
+    const valueText = String(row.value);
+    const valueWidth = ctx.measureText(valueText).width;
+
+    // Name, truncated with an ellipsis if it would otherwise collide
+    const nameMaxWidth = (rightX - valueWidth - 24) - (padX + 60);
     ctx.fillStyle = INK;
-    ctx.font = "700 34px 'Inter'";
-    ctx.fillText(row.name, padX + 60, cursorY + 34);
+    ctx.font = nameFont;
+    ctx.fillText(truncateText(row.name, nameFont, nameMaxWidth), padX + 60, cursorY + 34);
 
     // Sub-detail (team, or whatever context fits)
     if (row.sub) {
@@ -687,11 +709,10 @@ async function generateShareImage(type, data) {
       ctx.fillText(row.sub, padX + 60, cursorY + 64);
     }
 
-    // Value, right-aligned
     ctx.fillStyle = INK;
-    ctx.font = "700 34px 'IBM Plex Mono'";
+    ctx.font = valueFont;
     ctx.textAlign = 'right';
-    ctx.fillText(String(row.value), rightX, cursorY + 34);
+    ctx.fillText(valueText, rightX, cursorY + 34);
     ctx.textAlign = 'left';
 
     // Faint row divider
@@ -733,6 +754,22 @@ async function sharePlayerImage(pid) {
   const rows = profile.appearances.slice(0, 5).map(a => ({
     rank: `#${a.rank}`, name: a.title, value: a.value, sub: null,
   }));
+  // Some players only appear on 1-2 leaderboards, leaving the card sparse.
+  // Fill remaining space with their real career totals instead of leaving it
+  // blank -- honest content, not padding.
+  const c = profile.career || {};
+  if (rows.length < 4 && c.passing) {
+    rows.push({ rank: '\u2022', name: 'Career passing yards', value: c.passing.yds.toLocaleString(), sub: `${c.passing.td} TD, ${c.passing.int} INT` });
+  }
+  if (rows.length < 4 && c.rushing) {
+    rows.push({ rank: '\u2022', name: 'Career rushing yards', value: c.rushing.yds.toLocaleString(), sub: `${c.rushing.td} TD` });
+  }
+  if (rows.length < 4 && c.receiving) {
+    rows.push({ rank: '\u2022', name: 'Career receiving yards', value: c.receiving.yds.toLocaleString(), sub: `${c.receiving.td} TD` });
+  }
+  if (rows.length < 4 && c.defense) {
+    rows.push({ rank: '\u2022', name: 'Career sacks', value: c.defense.sacks, sub: `${c.defense.tfl} TFL, ${c.defense.ints} INT` });
+  }
   const canvas = await generateShareImage('player', {
     label: `${profile.position || ''} ${profile.team || ''}`.trim(),
     claim: profile.name,
