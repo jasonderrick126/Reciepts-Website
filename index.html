@@ -175,6 +175,13 @@
   }
   .search-result-row:hover { background: rgba(20,33,61,0.06); }
   .search-result-row .meta { color: var(--ink-soft); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  .movers-section { padding: 40px 0; }
+  .movers-list { display: flex; flex-direction: column; gap: 10px; }
+  .mover-row {
+    padding: 12px 16px; background: rgba(20,33,61,0.04); border-left: 3px solid var(--amber-deep);
+    font-size: 14px; color: var(--ink); line-height: 1.5;
+  }
+  .movers-empty { font-size: 14px; color: var(--ink-soft); padding: 8px 0; }
   .about-section { padding: 72px 0 88px; max-width: 620px; }
   .about-section p { color: rgba(250,246,236,0.85); font-size: 16px; line-height: 1.7; margin-bottom: 18px; }
   .about-section p:last-child { margin-bottom: 0; }
@@ -264,6 +271,14 @@
     </div>
     <div class="receipt" id="hero-receipt"></div>
   </section>
+
+  <div class="movers-section" id="movers-section">
+    <div class="section-head">
+      <h2>What's changed</h2>
+      <p>Real movement since the last data update -- new leaders, new top-10 entrants, and notable shifts.</p>
+    </div>
+    <div class="movers-list" id="movers-list"></div>
+  </div>
 
   <div class="section-head" id="browse-section">
     <h2>Browse by whatever you're into</h2>
@@ -672,9 +687,21 @@ document.querySelectorAll('#chip-row .chip').forEach(chip => {
   });
 });
 
+const MOVERS = [];
+
+function renderMovers() {
+  const list = document.getElementById('movers-list');
+  if (!MOVERS || MOVERS.length === 0) {
+    list.innerHTML = '<div class="movers-empty">No changes to report yet -- check back after the next data update.</div>';
+    return;
+  }
+  list.innerHTML = MOVERS.map(m => `<div class="mover-row">${m.text}</div>`).join('');
+}
+
 render();
 initMomentChips();
 renderHero();
+renderMovers();
 </script>
 
 </body>
