@@ -609,7 +609,8 @@ async function generateShareImage(type, data) {
   ctx.fill();
 
   const padX = cardLeft + 56;
-  const maxTextWidth = (cardRight - 56) - padX;
+  const rightX = cardRight - 56;
+  const maxTextWidth = rightX - padX;
   let cursorY = cardTop + 90;
 
   function wrapText(text, font, maxWidth) {
@@ -634,15 +635,24 @@ async function generateShareImage(type, data) {
   ctx.fillStyle = AMBER_DEEP;
   ctx.font = "600 26px 'IBM Plex Mono'";
   ctx.fillText(data.label, padX, cursorY);
-  cursorY += 60;
+  cursorY += 58;
 
   // Main claim, word-wrapped
   ctx.fillStyle = INK;
-  const claimLines = wrapText(data.claim, "700 46px 'Inter'", maxTextWidth);
-  ctx.font = "700 46px 'Inter'";
+  const claimLines = wrapText(data.claim, "700 44px 'Inter'", maxTextWidth);
+  ctx.font = "700 44px 'Inter'";
   for (const line of claimLines) {
     ctx.fillText(line, padX, cursorY);
-    cursorY += 58;
+    cursorY += 54;
+  }
+
+  // Compact context line (sample size / coverage), single line, right under the claim
+  if (data.context) {
+    cursorY += 6;
+    ctx.fillStyle = INK_SOFT;
+    ctx.font = "500 24px 'IBM Plex Mono'";
+    ctx.fillText(data.context, padX, cursorY);
+    cursorY += 40;
   }
   cursorY += 20;
 
@@ -651,21 +661,48 @@ async function generateShareImage(type, data) {
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(padX, cursorY);
-  ctx.lineTo(cardRight - 56, cursorY);
+  ctx.lineTo(rightX, cursorY);
   ctx.stroke();
-  cursorY += 70;
+  cursorY += 50;
 
-  // Datum rows (label/value pairs)
-  for (const [label, value] of data.rows) {
-    ctx.fillStyle = INK_SOFT;
-    ctx.font = "500 28px 'Inter'";
-    ctx.fillText(label, padX, cursorY);
+  // Real leaderboard rows -- rank, name, team/sub-detail, and value, styled
+  // like the actual site's leaderboard rows rather than generic stat lines.
+  const rows = data.rows.slice(0, 5);
+  const rowHeight = Math.min(105, Math.floor((cardBottom - 90 - cursorY) / Math.max(rows.length, 1)));
+  for (const row of rows) {
+    // Rank badge
+    ctx.fillStyle = AMBER;
+    ctx.font = "700 30px 'IBM Plex Mono'";
+    ctx.fillText(String(row.rank), padX, cursorY + 34);
+
+    // Name
     ctx.fillStyle = INK;
-    ctx.font = "600 32px 'IBM Plex Mono'";
+    ctx.font = "700 34px 'Inter'";
+    ctx.fillText(row.name, padX + 60, cursorY + 34);
+
+    // Sub-detail (team, or whatever context fits)
+    if (row.sub) {
+      ctx.fillStyle = INK_SOFT;
+      ctx.font = "500 22px 'Inter'";
+      ctx.fillText(row.sub, padX + 60, cursorY + 64);
+    }
+
+    // Value, right-aligned
+    ctx.fillStyle = INK;
+    ctx.font = "700 34px 'IBM Plex Mono'";
     ctx.textAlign = 'right';
-    ctx.fillText(value, cardRight - 56, cursorY);
+    ctx.fillText(String(row.value), rightX, cursorY + 34);
     ctx.textAlign = 'left';
-    cursorY += 56;
+
+    // Faint row divider
+    ctx.strokeStyle = PAPER_LINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padX, cursorY + rowHeight - 14);
+    ctx.lineTo(rightX, cursorY + rowHeight - 14);
+    ctx.stroke();
+
+    cursorY += rowHeight;
   }
 
   // Footer URL
@@ -678,14 +715,14 @@ async function generateShareImage(type, data) {
 
 async function shareStatImage(index) {
   const stat = currentMatches[index];
+  const rows = stat.leaderboard.slice(0, 5).map(r => ({
+    rank: r.rank, name: r.name, value: r.value, sub: `${r.pos || ''} ${r.team || ''}`.trim(),
+  }));
   const canvas = await generateShareImage('stat', {
     label: 'Proof of clutch',
-    claim: `${stat.leader} leads: ${stat.title.toLowerCase()}.`,
-    rows: [
-      ['Value', String(stat.value)],
-      ['Sample', `${stat.n} ${stat.unit || 'attempts'}`],
-      ['Coverage', stat.years.split(',')[0]],
-    ],
+    claim: stat.title,
+    context: `${stat.years.split(',')[0]} ${stat.min_sample ? `\u00b7 min. ${stat.min_sample} ${stat.unit || 'attempts'}` : ''}`,
+    rows,
   });
   downloadOrShareCanvas(canvas, `${slugify(stat.title)}.png`);
 }
@@ -693,14 +730,14 @@ async function shareStatImage(index) {
 async function sharePlayerImage(pid) {
   const profile = PLAYER_PROFILES[pid];
   if (!profile) return;
-  const top = profile.appearances[0];
+  const rows = profile.appearances.slice(0, 5).map(a => ({
+    rank: `#${a.rank}`, name: a.title, value: a.value, sub: null,
+  }));
   const canvas = await generateShareImage('player', {
     label: `${profile.position || ''} ${profile.team || ''}`.trim(),
     claim: profile.name,
-    rows: top ? [
-      [top.title, String(top.value)],
-      ['Rank', `#${top.rank} all-time`],
-    ] : [],
+    context: profile.career.games ? `${profile.career.first_season}\u2013${profile.career.last_season} \u00b7 ${profile.career.games} games` : '',
+    rows,
   });
   downloadOrShareCanvas(canvas, `${slugify(profile.name)}.png`);
 }
