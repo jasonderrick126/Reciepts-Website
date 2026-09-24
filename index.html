@@ -747,7 +747,7 @@ async function generateShareImage(type, data) {
   return canvas;
 }
 
-async function shareStatImage(index) {
+async function buildStatCanvas(index) {
   const stat = currentMatches[index];
   const rows = stat.leaderboard.slice(0, 5).map(r => ({
     rank: r.rank, name: r.name, value: r.value, sub: `${r.pos || ''} ${r.team || ''}`.trim(),
@@ -758,12 +758,12 @@ async function shareStatImage(index) {
     context: `${stat.years.split(',')[0]} ${stat.min_sample ? `\u00b7 min. ${stat.min_sample} ${stat.unit || 'attempts'}` : ''}`,
     rows,
   });
-  downloadOrShareCanvas(canvas, `${slugify(stat.title)}.png`);
+  return { canvas, filename: `${slugify(stat.title)}.png` };
 }
 
-async function sharePlayerImage(pid) {
+async function buildPlayerCanvas(pid) {
   const profile = PLAYER_PROFILES[pid];
-  if (!profile) return;
+  if (!profile) return null;
   const rows = profile.appearances.slice(0, 5).map(a => ({
     rank: `#${a.rank}`, name: a.title, value: a.value, sub: null,
   }));
@@ -789,21 +789,52 @@ async function sharePlayerImage(pid) {
     context: profile.career.games ? `${profile.career.first_season}\u2013${profile.career.last_season} \u00b7 ${profile.career.games} games` : '',
     rows,
   });
-  downloadOrShareCanvas(canvas, `${slugify(profile.name)}.png`);
+  return { canvas, filename: `${slugify(profile.name)}.png` };
 }
 
-function downloadOrShareCanvas(canvas, filename) {
-  // Always download directly -- no auto-invoked OS share sheet. That path
-  // turned out to be genuinely unreliable in the real world (Windows can
-  // route file-sharing through a Bluetooth "Nearby Sharing" feature, and if
-  // that's misbehaving, the browser hangs waiting on it instead of falling
-  // back cleanly). A plain, guaranteed-to-work download is simpler and safer.
+async function downloadStatImage(index) {
+  const { canvas, filename } = await buildStatCanvas(index);
+  downloadCanvas(canvas, filename);
+}
+async function downloadPlayerImage(pid) {
+  const built = await buildPlayerCanvas(pid);
+  if (built) downloadCanvas(built.canvas, built.filename);
+}
+async function shareStatImageNative(index) {
+  const { canvas, filename } = await buildStatCanvas(index);
+  shareCanvasNative(canvas, filename);
+}
+async function sharePlayerImageNative(pid) {
+  const built = await buildPlayerCanvas(pid);
+  if (built) shareCanvasNative(built.canvas, built.filename);
+}
+
+function downloadCanvas(canvas, filename) {
+  // Always a direct download -- guaranteed to work regardless of platform.
+  // Real, explicit sharing (the native OS share sheet) is a separate,
+  // user-chosen action below, not something this function tries automatically.
   canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }, 'image/png');
+}
+
+function shareCanvasNative(canvas, filename) {
+  // Only runs when the person explicitly taps "Share" -- never automatic.
+  // If the native share sheet isn't supported or the person cancels, this
+  // just quietly does nothing; "Download" sits right next to it as the
+  // always-available alternative, so there's no need for this to chain
+  // into anything else on failure.
+  canvas.toBlob(async (blob) => {
+    const file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Receipts' });
+      } catch (e) { /* cancelled or unsupported -- nothing more to do */ }
+    }
   }, 'image/png');
 }
 
@@ -899,7 +930,8 @@ function openPlayerPage(pid) {
     <div class="years">${profile.position} &nbsp;/&nbsp; ${profile.team}</div>
     <div class="share-row">
       <button class="share-btn" onclick="copyLink(this)">Copy link</button>
-      <button class="share-btn primary" onclick="sharePlayerImage('${pid}')">Download image</button>
+      <button class="share-btn primary" onclick="downloadPlayerImage('${pid}')">Download image</button>
+      <button class="share-btn" onclick="sharePlayerImageNative('${pid}')">Share</button>
     </div>
     <hr>
     <div class="label" style="margin-bottom:6px;">Career (real play-by-play totals)</div>
@@ -940,7 +972,8 @@ function openModal(index) {
     <div class="years">${stat.years}${stat.min_sample ? ` &nbsp;/&nbsp; min. ${stat.min_sample} attempts to qualify` : ''}</div>
     <div class="share-row">
       <button class="share-btn" onclick="copyLink(this)">Copy link</button>
-      <button class="share-btn primary" onclick="shareStatImage(${index})">Download image</button>
+      <button class="share-btn primary" onclick="downloadStatImage(${index})">Download image</button>
+      <button class="share-btn" onclick="shareStatImageNative(${index})">Share</button>
     </div>
     <hr>
     ${rows}
