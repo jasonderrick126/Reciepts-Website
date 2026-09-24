@@ -706,14 +706,12 @@ async function sharePlayerImage(pid) {
 }
 
 function downloadOrShareCanvas(canvas, filename) {
-  canvas.toBlob(async (blob) => {
-    const file = new File([blob], filename, { type: 'image/png' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: 'Receipts' });
-        return;
-      } catch (e) { /* user cancelled or share failed -- fall through to download */ }
-    }
+  // Always download directly -- no auto-invoked OS share sheet. That path
+  // turned out to be genuinely unreliable in the real world (Windows can
+  // route file-sharing through a Bluetooth "Nearby Sharing" feature, and if
+  // that's misbehaving, the browser hangs waiting on it instead of falling
+  // back cleanly). A plain, guaranteed-to-work download is simpler and safer.
+  canvas.toBlob((blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
@@ -814,7 +812,7 @@ function openPlayerPage(pid) {
     <div class="years">${profile.position} &nbsp;/&nbsp; ${profile.team}</div>
     <div class="share-row">
       <button class="share-btn" onclick="copyLink(this)">Copy link</button>
-      <button class="share-btn primary" onclick="sharePlayerImage('${pid}')">Share as image</button>
+      <button class="share-btn primary" onclick="sharePlayerImage('${pid}')">Download image</button>
     </div>
     <hr>
     <div class="label" style="margin-bottom:6px;">Career (real play-by-play totals)</div>
@@ -855,7 +853,7 @@ function openModal(index) {
     <div class="years">${stat.years}${stat.min_sample ? ` &nbsp;/&nbsp; min. ${stat.min_sample} attempts to qualify` : ''}</div>
     <div class="share-row">
       <button class="share-btn" onclick="copyLink(this)">Copy link</button>
-      <button class="share-btn primary" onclick="shareStatImage(${index})">Share as image</button>
+      <button class="share-btn primary" onclick="shareStatImage(${index})">Download image</button>
     </div>
     <hr>
     ${rows}
