@@ -197,6 +197,7 @@
   .mover-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .mover-row.clickable { cursor: pointer; transition: background 0.15s; }
   .mover-row.clickable:hover, .mover-row.clickable:focus { background: rgba(250,246,236,0.14); outline: none; }
+  .mover-text { flex: 1; min-width: 0; }
   .mover-go { color: var(--amber); font-size: 16px; flex-shrink: 0; }
   .mover-row strong { color: var(--amber); font-weight: 600; }
   .mover-row em { color: var(--paper); font-style: normal; font-weight: 500; }
@@ -1036,7 +1037,7 @@ function renderMovers() {
     list.innerHTML = '<div class="movers-empty">No changes to report yet -- check back after the next data update.</div>';
     return;
   }
-  list.innerHTML = MOVERS.map((m, i) => `<div class="mover-row ${m.stat ? 'clickable' : ''}" ${m.stat ? `onclick="openMoverStat(${i})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMoverStat(${i})"` : ''}>${m.text}${m.stat ? '<span class="mover-go">&rarr;</span>' : ''}</div>`).join('');
+  list.innerHTML = MOVERS.map((m, i) => `<div class="mover-row ${m.stat ? 'clickable' : ''}" ${m.stat ? `onclick="openMoverStat(${i})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMoverStat(${i})"` : ''}><span class="mover-text">${m.text}</span>${m.stat ? '<span class="mover-go">&rarr;</span>' : ''}</div>`).join('');
 }
 
 function openMoverStat(i) {
