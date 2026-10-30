@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026 NFL Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Broadcast-graphics look: cool field-grey paper, ink navy, one signal red; team colors carry the rest.
+   Layout: header strip, tab bar, then a two-column workspace (table | detail) that stacks on phones. */
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #0e1726; --muted: #5d6878; --line: #d6dce3; --accent: #c8102e;
+  --pos: #18794e; --neg: #b42318; --fill: #e3e8ee;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif; --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c121b; --surface: #141c28; --ink: #e7ecf2; --muted: #94a1b3; --line: #253244; --accent: #ff5a5f;
+  --pos: #4cc38a; --neg: #ff7a6e; --fill: #1d2837; color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0c121b; --surface: #141c28; --ink: #e7ecf2; --muted: #94a1b3; --line: #253244; --accent: #ff5a5f;
+  --pos: #4cc38a; --neg: #ff7a6e; --fill: #1d2837; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--body); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px 40px; }
+header { border-bottom: 3px solid var(--accent); background: var(--surface); }
+header .wrap { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; padding-top: 18px; padding-bottom: 12px; }
+h1 { font: 700 34px/1 var(--display); letter-spacing: .01em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); } h1 b { font-weight: inherit; }
+.sub { color: var(--muted); margin: 4px 0 0; font-size: 13px; }
+nav { display: flex; gap: 4px; }
+.tab { font: 600 18px/1 var(--display); text-transform: uppercase; letter-spacing: .04em; padding: 10px 16px; border: 1px solid var(--line); background: transparent; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 18px 0 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 7px 14px; cursor: pointer; font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+label.inl { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+select { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.btn { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font-weight: 600; cursor: pointer; }
+.btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.btn:disabled { opacity: .5; cursor: default; }
+#status { color: var(--muted); font-size: 13px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 20px; align-items: start; }
+@media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.tablewrap { overflow-x: auto; padding: 0; }
+table.odds { width: 100%; border-collapse: collapse; min-width: 660px; }
+.odds th, .odds td { padding: 7px 6px; text-align: right; white-space: nowrap; }
+.odds thead th { font: 600 13px/1.1 var(--display); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
+.odds thead th:first-child, .odds td.team { text-align: left; }
+.odds .divrow th { text-align: left; font: 700 15px/1 var(--display); text-transform: uppercase; letter-spacing: .06em; padding-top: 16px; color: var(--ink); border-bottom: 2px solid var(--ink); }
+.trow { cursor: pointer; border-bottom: 1px solid var(--line); }
+.trow:hover { background: var(--fill); }
+.trow.sel { background: var(--fill); box-shadow: inset 4px 0 0 var(--accent); }
+.team { display: flex; align-items: center; gap: 8px; }
+.odds td:first-child, .odds th:first-child { padding-left: 12px; }
+.tname { font-weight: 600; }
+.num.pos { color: var(--pos); } .num.neg { color: var(--neg); }
+td.pc { position: relative; width: 62px; }
+td.pc .bar { left: 3px !important; right: 3px !important; }
+td.pc .bar { position: absolute; left: 6px; right: 6px; top: 50%; height: 22px; transform: translateY(-50%); border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent) calc(var(--p) * 100%), transparent 0); }
+td.pc .v { position: relative; }
+td.pc.strong .v { font-weight: 700; }
+.chip { display: inline-grid; place-items: center; min-width: 40px; height: 24px; padding: 0 6px; border-radius: 4px; background: var(--c1); color: #fff; font: 700 14px/1 var(--display); letter-spacing: .04em; box-shadow: inset 0 -3px 0 var(--c2); text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+.side { display: grid; gap: 20px; }
+h2 { font: 700 20px/1.1 var(--display); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 4px; }
+h3 { font: 700 24px/1.05 var(--display); margin: 0; text-transform: uppercase; }
+h4 { font: 600 13px/1 var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
+.muted { color: var(--muted); } p { margin: 0; }
+.tc-head { display: flex; gap: 12px; align-items: center; border-left: 6px solid var(--c1); padding-left: 12px; }
+.tc-head .chip { min-width: 52px; height: 36px; font-size: 20px; }
+.tc-head p { font-size: 13px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-top: 14px; }
+.kpi { background: var(--fill); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px; }
+.kpi .k { font-size: 12px; color: var(--muted); }
+.kpi .v { font: 700 24px/1.05 var(--display); }
+.hist { display: flex; align-items: flex-end; gap: 3px; height: 110px; }
+.hb { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.hbar { width: 100%; background: var(--c1, var(--accent)); border-radius: 3px 3px 0 0; min-height: 1px; }
+.hp { font-size: 10px; color: var(--muted); height: 14px; }
+.hl { font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); width: 100%; text-align: center; padding-top: 2px; }
+.seeds { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.seed { display: grid; text-align: center; background: var(--fill); border-radius: 6px; padding: 6px 2px; font-size: 12px; }
+.seed b { font: 700 15px/1 var(--display); }
+.seed.dw b { color: var(--accent); }
+.sched { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sched li { display: grid; grid-template-columns: 44px 28px 48px 1fr 70px; align-items: center; gap: 8px; font-size: 13px; }
+.sched .wk, .sched .at { color: var(--muted); }
+.sched .gp { text-align: right; font-weight: 600; }
+.sched .gp.locked { color: var(--accent); font-size: 12px; }
+.mini { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--c1, var(--accent)) calc(var(--p) * 100%), var(--fill) 0); }
+.foot { font-size: 12px; color: var(--muted); margin-top: 6px; }
+#picks { display: grid; gap: 6px; margin-top: 10px; }
+.pick { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 6px; align-items: center; }
+.pb { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; border-left: 5px solid var(--c1); }
+.pb b { font: 700 16px/1 var(--display); letter-spacing: .03em; }
+.pb small { color: var(--muted); }
+.pb.on { background: var(--ink); color: var(--bg); border-color: var(--ink); border-left-color: var(--c1); }
+.pb.on small { color: inherit; }
+.pb.on::after { content: "WIN"; font: 700 11px/1 var(--display); letter-spacing: .08em; background: var(--accent); color: #fff; padding: 3px 5px; border-radius: 3px; margin-left: 6px; }
+.pm { text-align: center; font-size: 12px; color: var(--muted); display: grid; }
+.pm small { font-size: 11px; }
+.pickhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.note { font-size: 13px; color: var(--muted); margin-top: 6px; max-width: 65ch; }
+/* matchup */
+.mform { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin: 18px 0 12px; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.field select { min-width: 200px; font-size: 15px; color: var(--ink); }
+#minfo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.warn { color: var(--neg); }
+table.board { width: 100%; border-collapse: collapse; background: var(--ink); color: var(--bg); border-radius: 10px; overflow: hidden; }
+.board th, .board td { padding: 10px 12px; text-align: center; font: 600 22px/1 var(--display); }
+.board thead th { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; padding: 8px 12px; }
+.board thead th:first-child { text-align: left; opacity: 1; color: var(--accent); }
+.board tbody th { text-align: left; display: flex; align-items: center; gap: 10px; }
+.board .tot { font-size: 30px; background: rgba(255,255,255,.06); }
+.board tr.win .tot { color: var(--accent); }
+.board .chip { height: 28px; font-size: 16px; }
+#mmulti .kpis { margin-top: 0; }
+.mlay { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .mlay { grid-template-columns: 1fr; } }
+#mlog { list-style: none; margin: 0; padding: 0; max-height: 520px; overflow-y: auto; }
+.drive { display: grid; grid-template-columns: 62px 46px 1fr 56px; grid-template-rows: auto auto; column-gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); align-items: center; font-size: 14px; }
+.drive .when { color: var(--muted); font-size: 12px; grid-row: span 2; }
+.drive .chip { grid-row: span 2; }
+.drive .res { font-weight: 600; }
+.drive .meta { grid-column: 3; color: var(--muted); font-size: 12px; }
+.drive .sc { grid-column: 4; grid-row: 1 / span 2; text-align: right; font: 600 17px/1 var(--display); }
+.drive.td .res { color: var(--pos); } .drive.fg .res { color: var(--ink); } .drive.to .res { color: var(--neg); }
+.drive.td { background: color-mix(in srgb, var(--pos) 8%, transparent); }
+.mhist { display: flex; align-items: flex-end; gap: 2px; height: 140px; border-bottom: 1px solid var(--line); }
+.mb { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.mb span { width: 100%; height: var(--h); border-radius: 2px 2px 0 0; min-height: 1px; }
+.mb.a span { background: var(--ca); } .mb.h span { background: var(--ch); } .mb.z span { background: var(--muted); }
+.axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.finals { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.finals li { display: flex; justify-content: space-between; max-width: 320px; }
+.howto { margin-top: 24px; font-size: 13px; color: var(--muted); max-width: 80ch; display: grid; gap: 6px; }
+.howto b { color: var(--ink); }
+@media (max-width: 480px) { .wrap { padding: 0 14px 32px; } h1 { font-size: 28px; } .seeds { grid-template-columns: repeat(4, 1fr); } .sched li { grid-template-columns: 40px 26px 46px 1fr 56px; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div><h1><b id="season">2026</b> NFL <span>Simulator</span></h1>
+  <p class="sub"><a href="/" style="color:inherit">← Receipts</a> · Results through <span id="asof"></span> · <span id="gamesleft"></span> regular-season games left · data: nflverse</p></div>
+  <nav aria-label="Views"><button class="tab" data-go="season">Season odds</button><button class="tab" data-go="matchup">Matchup</button></nav>
+</div></header>
+
+<main class="wrap">
+<section data-view="season">
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Conference"><button data-conf="AFC" aria-pressed="false">AFC</button><button data-conf="NFC" aria-pressed="true">NFC</button></div>
+    <label class="inl" for="sort">Sort <select id="sort"><option value="div">By division</option><option value="po">Playoff odds</option><option value="sb">Super Bowl odds</option><option value="rating">Power rating</option></select></label>
+    <label class="inl" for="nsims">Seasons <select id="nsims"><option value="2000">2,000</option><option value="10000" selected>10,000</option><option value="25000">25,000</option></select></label>
+    <button class="btn" id="run">Re-run simulation</button>
+    <span id="status" aria-live="polite"></span>
+  </div>
+  <div class="grid">
+    <div class="card tablewrap">
+      <table class="odds">
+        <thead><tr><th scope="col">Team</th><th scope="col">Record</th><th scope="col" title="Points better than an average team on a neutral field">Rating</th><th scope="col">Proj. W-L</th><th scope="col">Win div</th><th scope="col">Playoffs</th><th scope="col">#1 seed</th><th scope="col">Win conf</th><th scope="col">Win SB</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="side">
+      <div class="card" id="teamcard"></div>
+      <div class="card">
+        <div class="pickhead"><h2>What if…</h2><div style="display:flex;gap:8px;align-items:center"><select id="wk" aria-label="Week"></select><button class="btn ghost" id="clear">Clear picks</button></div></div>
+        <p class="note">Tap a team to lock in a win. The whole season re-simulates instantly. Percentages are the model’s pre-pick chances.</p>
+        <div id="picks"></div>
+      </div>
+    </div>
+  </div>
+  <div class="howto">
+    <p><b>How it works.</b> Each team gets an offense and defense rating, fit from every 2026 score so far plus the betting market’s spreads and totals (which carry injury and QB news the scores don’t). Each remaining game is simulated with a typical NFL spread of outcomes (±13.5 points), and each simulated season also nudges every team’s true strength up or down a bit, since ratings after 8 weeks are uncertain.</p>
+    <p><b>Simplifications.</b> Tiebreakers use record, head-to-head, division record, conference record, then a coin flip (the NFL’s full list goes deeper). Seven teams per conference make the playoffs; the higher seed hosts; ratings don’t change mid-season.</p>
+  </div>
+</section>
+
+<section data-view="matchup" hidden>
+  <div class="mform">
+    <label class="field" for="ma">Away<select id="ma"></select></label>
+    <button class="btn ghost" id="swap" aria-label="Swap home and away">⇄ Swap</button>
+    <label class="field" for="mh">Home<select id="mh"></select></label>
+    <label class="inl" for="mn"><input type="checkbox" id="mn"> Neutral site</label>
+    <label class="inl" for="mp"><input type="checkbox" id="mp"> Playoff rules (no ties)</label>
+  </div>
+  <div id="minfo"></div>
+  <div class="toolbar" style="margin-top:0">
+    <button class="btn" id="mplay">Play one game</button>
+    <button class="btn ghost" id="mmany">Simulate 10,000 games</button>
+    <button class="btn ghost" id="mskip" hidden>Skip to final</button>
+  </div>
+  <div class="mlay">
+    <div><div id="mscore"></div><div id="mmulti"></div></div>
+    <div class="card" style="padding:8px 12px"><h4 style="margin-top:6px">Drive log</h4><ol id="mlog" aria-live="off"></ol></div>
+  </div>
+  <div class="howto">
+    <p><b>How it works.</b> The game is played possession by possession. Each drive ends in a touchdown, field goal, punt, turnover or turnover on downs, with odds set by the offense’s rating against the defense’s and by field position. Drives burn real clock, so a game runs about 11 possessions per side. Overtime follows current NFL rules: both teams get the ball, then sudden death; regular-season games can still end tied after 10 minutes.</p>
+  </div>
+</section>
+</main>
+
+<script>const DATA = /*DATA_START*/{"season":2026,"asOf":"2026-10-29","mu":22.71,"hfa":1.34,"teams":[{"id":"ARI","name":"Arizona Cardinals","nick":"Cardinals","div":"NFC West","conf":"NFC","c1":"#97233f","c2":"#000000","off":-1.03,"def":-3.06},{"id":"ATL","name":"Atlanta Falcons","nick":"Falcons","div":"NFC South","conf":"NFC","c1":"#a71930","c2":"#000000","off":-0.28,"def":-0.67},{"id":"BAL","name":"Baltimore Ravens","nick":"Ravens","div":"AFC North","conf":"AFC","c1":"#241773","c2":"#000000","off":1.15,"def":0.38},{"id":"BUF","name":"Buffalo Bills","nick":"Bills","div":"AFC East","conf":"AFC","c1":"#00338d","c2":"#c60c30","off":4.82,"def":-1.04},{"id":"CAR","name":"Carolina Panthers","nick":"Panthers","div":"NFC South","conf":"NFC","c1":"#0085ca","c2":"#000000","off":0.31,"def":-0.84},{"id":"CHI","name":"Chicago Bears","nick":"Bears","div":"NFC North","conf":"NFC","c1":"#0b162a","c2":"#c83803","off":2.09,"def":-0.17},{"id":"CIN","name":"Cincinnati Bengals","nick":"Bengals","div":"AFC North","conf":"AFC","c1":"#000000","c2":"#fb4f14","off":2.99,"def":0.41},{"id":"CLE","name":"Cleveland Browns","nick":"Browns","div":"AFC North","conf":"AFC","c1":"#fb4f14","c2":"#22150c","off":-3.3,"def":0.36},{"id":"DAL","name":"Dallas Cowboys","nick":"Cowboys","div":"NFC East","conf":"NFC","c1":"#002244","c2":"#b0b7bc","off":3.29,"def":-1.66},{"id":"DEN","name":"Denver Broncos","nick":"Broncos","div":"AFC West","conf":"AFC","c1":"#002244","c2":"#fb4f14","off":-0.13,"def":2.0},{"id":"DET","name":"Detroit Lions","nick":"Lions","div":"NFC North","conf":"NFC","c1":"#005a8b","c2":"#b0b7bc","off":3.99,"def":-1.61},{"id":"GB","name":"Green Bay Packers","nick":"Packers","div":"NFC North","conf":"NFC","c1":"#203731","c2":"#ffb612","off":0.41,"def":0.54},{"id":"HOU","name":"Houston Texans","nick":"Texans","div":"AFC South","conf":"AFC","c1":"#03202f","c2":"#a71930","off":-0.19,"def":1.91},{"id":"IND","name":"Indianapolis Colts","nick":"Colts","div":"AFC South","conf":"AFC","c1":"#002c5f","c2":"#a5acaf","off":-0.48,"def":-1.43},{"id":"JAX","name":"Jacksonville Jaguars","nick":"Jaguars","div":"AFC South","conf":"AFC","c1":"#000000","c2":"#006778","off":1.98,"def":1.48},{"id":"KC","name":"Kansas City Chiefs","nick":"Chiefs","div":"AFC West","conf":"AFC","c1":"#e31837","c2":"#ffb612","off":1.44,"def":2.03},{"id":"LA","name":"Los Angeles Rams","nick":"Rams","div":"NFC West","conf":"NFC","c1":"#002244","c2":"#b3995d","off":2.27,"def":0.63},{"id":"LAC","name":"Los Angeles Chargers","nick":"Chargers","div":"AFC West","conf":"AFC","c1":"#002244","c2":"#0073cf","off":-1.87,"def":-0.12},{"id":"LV","name":"Las Vegas Raiders","nick":"Raiders","div":"AFC West","conf":"AFC","c1":"#a5acaf","c2":"#000000","off":-0.57,"def":-2.11},{"id":"MIA","name":"Miami Dolphins","nick":"Dolphins","div":"AFC East","conf":"AFC","c1":"#008e97","c2":"#f58220","off":-3.92,"def":-1.46},{"id":"MIN","name":"Minnesota Vikings","nick":"Vikings","div":"NFC North","conf":"NFC","c1":"#4f2683","c2":"#ffc62f","off":-0.91,"def":2.81},{"id":"NE","name":"New England Patriots","nick":"Patriots","div":"AFC East","conf":"AFC","c1":"#002244","c2":"#c60c30","off":0.82,"def":0.82},{"id":"NO","name":"New Orleans Saints","nick":"Saints","div":"NFC South","conf":"NFC","c1":"#9f8958","c2":"#000000","off":-0.57,"def":-1.52},{"id":"NYG","name":"New York Giants","nick":"Giants","div":"NFC East","conf":"NFC","c1":"#0b2265","c2":"#a71930","off":-2.21,"def":-0.86},{"id":"NYJ","name":"New York Jets","nick":"Jets","div":"AFC East","conf":"AFC","c1":"#203731","c2":"#1c2d25","off":-2.44,"def":-0.29},{"id":"PHI","name":"Philadelphia Eagles","nick":"Eagles","div":"NFC East","conf":"NFC","c1":"#004953","c2":"#a5acaf","off":-3.08,"def":0.71},{"id":"PIT","name":"Pittsburgh Steelers","nick":"Steelers","div":"AFC North","conf":"AFC","c1":"#000000","c2":"#ffb612","off":-1.39,"def":2.07},{"id":"SEA","name":"Seattle Seahawks","nick":"Seahawks","div":"NFC West","conf":"NFC","c1":"#002244","c2":"#69be28","off":0.74,"def":3.14},{"id":"SF","name":"San Francisco 49ers","nick":"49ers","div":"NFC West","conf":"NFC","c1":"#aa0000","c2":"#b3995d","off":2.74,"def":0.42},{"id":"TB","name":"Tampa Bay Buccaneers","nick":"Buccaneers","div":"NFC South","conf":"NFC","c1":"#d50a0a","c2":"#34302b","off":-0.9,"def":0.14},{"id":"TEN","name":"Tennessee Titans","nick":"Titans","div":"AFC South","conf":"AFC","c1":"#002244","c2":"#4b92db","off":-4.67,"def":-1.08},{"id":"WAS","name":"Washington Commanders","nick":"Commanders","div":"NFC East","conf":"NFC","c1":"#773141","c2":"#ffb612","off":-1.08,"def":-1.94}],"games":[{"wk":1,"d":"2026-09-09","a":"NE","h":"SEA","n":0,"as":10,"hs":13,"sp":3.0},{"wk":1,"d":"2026-09-10","a":"SF","h":"LA","n":1,"as":27,"hs":7,"sp":3.5},{"wk":1,"d":"2026-09-13","a":"CHI","h":"CAR","n":0,"as":59,"hs":37,"sp":-3.0},{"wk":1,"d":"2026-09-13","a":"TB","h":"CIN","n":0,"as":27,"hs":33,"sp":3.5},{"wk":1,"d":"2026-09-13","a":"NO","h":"DET","n":0,"as":30,"hs":31,"sp":7.0},{"wk":1,"d":"2026-09-13","a":"BUF","h":"HOU","n":0,"as":36,"hs":31,"sp":-1.5},{"wk":1,"d":"2026-09-13","a":"BAL","h":"IND","n":0,"as":41,"hs":23,"sp":-3.0},{"wk":1,"d":"2026-09-13","a":"CLE","h":"JAX","n":0,"as":10,"hs":34,"sp":8.5},{"wk":1,"d":"2026-09-13","a":"ATL","h":"PIT","n":0,"as":13,"hs":20,"sp":6.5},{"wk":1,"d":"2026-09-13","a":"NYJ","h":"TEN","n":0,"as":23,"hs":10,"sp":1.5},{"wk":1,"d":"2026-09-13","a":"ARI","h":"LAC","n":0,"as":26,"hs":14,"sp":8.5},{"wk":1,"d":"2026-09-13","a":"MIA","h":"LV","n":0,"as":13,"hs":27,"sp":3.0},{"wk":1,"d":"2026-09-13","a":"GB","h":"MIN","n":0,"as":22,"hs":39,"sp":1.5},{"wk":1,"d":"2026-09-13","a":"WAS","h":"PHI","n":0,"as":22,"hs":24,"sp":6.0},{"wk":1,"d":"2026-09-13","a":"DAL","h":"NYG","n":0,"as":20,"hs":28,"sp":-3.0},{"wk":1,"d":"2026-09-14","a":"DEN","h":"KC","n":0,"as":10,"hs":31,"sp":2.5},{"wk":2,"d":"2026-09-17","a":"DET","h":"BUF","n":0,"as":31,"hs":41,"sp":5.5},{"wk":2,"d":"2026-09-20","a":"CAR","h":"ATL","n":0,"as":34,"hs":3,"sp":-2.5},{"wk":2,"d":"2026-09-20","a":"NO","h":"BAL","n":0,"as":24,"hs":17,"sp":8.5},{"wk":2,"d":"2026-09-20","a":"MIN","h":"CHI","n":0,"as":9,"hs":3,"sp":4.5},{"wk":2,"d":"2026-09-20","a":"CIN","h":"HOU","n":0,"as":20,"hs":6,"sp":3.0},{"wk":2,"d":"2026-09-20","a":"PIT","h":"NE","n":0,"as":3,"hs":20,"sp":4.5},{"wk":2,"d":"2026-09-20","a":"GB","h":"NYJ","n":0,"as":20,"hs":17,"sp":-3.5},{"wk":2,"d":"2026-09-20","a":"CLE","h":"TB","n":0,"as":23,"hs":19,"sp":8.5},{"wk":2,"d":"2026-09-20","a":"PHI","h":"TEN","n":0,"as":24,"hs":20,"sp":-7.0},{"wk":2,"d":"2026-09-20","a":"JAX","h":"DEN","n":0,"as":13,"hs":20,"sp":2.5},{"wk":2,"d":"2026-09-20","a":"LV","h":"LAC","n":0,"as":26,"hs":14,"sp":6.5},{"wk":2,"d":"2026-09-20","a":"SEA","h":"ARI","n":0,"as":31,"hs":7,"sp":-3.5},{"wk":2,"d":"2026-09-20","a":"WAS","h":"DAL","n":0,"as":20,"hs":37,"sp":3.5},{"wk":2,"d":"2026-09-20","a":"MIA","h":"SF","n":0,"as":13,"hs":35,"sp":12.5},{"wk":2,"d":"2026-09-20","a":"IND","h":"KC","n":0,"as":30,"hs":33,"sp":6.0},{"wk":2,"d":"2026-09-21","a":"NYG","h":"LA","n":0,"as":6,"hs":28,"sp":6.5},{"wk":3,"d":"2026-09-24","a":"ATL","h":"GB","n":0,"as":35,"hs":14,"sp":4.5},{"wk":3,"d":"2026-09-27","a":"LAC","h":"BUF","n":0,"as":16,"hs":24,"sp":7.0},{"wk":3,"d":"2026-09-27","a":"CAR","h":"CLE","n":0,"as":18,"hs":21,"sp":-2.5},{"wk":3,"d":"2026-09-27","a":"NYJ","h":"DET","n":0,"as":24,"hs":31,"sp":7.0},{"wk":3,"d":"2026-09-27","a":"HOU","h":"IND","n":0,"as":17,"hs":19,"sp":-1.5},{"wk":3,"d":"2026-09-27","a":"NE","h":"JAX","n":0,"as":6,"hs":35,"sp":3.0},{"wk":3,"d":"2026-09-27","a":"KC","h":"MIA","n":0,"as":24,"hs":10,"sp":-10.0},{"wk":3,"d":"2026-09-27","a":"TEN","h":"NYG","n":0,"as":7,"hs":12,"sp":2.5},{"wk":3,"d":"2026-09-27","a":"CIN","h":"PIT","n":0,"as":27,"hs":30,"sp":-3.5},{"wk":3,"d":"2026-09-27","a":"SEA","h":"WAS","n":0,"as":31,"hs":33,"sp":-8.5},{"wk":3,"d":"2026-09-27","a":"ARI","h":"SF","n":0,"as":30,"hs":36,"sp":7.5},{"wk":3,"d":"2026-09-27","a":"MIN","h":"TB","n":0,"as":23,"hs":16,"sp":-1.5},{"wk":3,"d":"2026-09-27","a":"BAL","h":"DAL","n":1,"as":34,"hs":31,"sp":-3.0},{"wk":3,"d":"2026-09-27","a":"LV","h":"NO","n":0,"as":35,"hs":27,"sp":3.5},{"wk":3,"d":"2026-09-27","a":"LA","h":"DEN","n":0,"as":26,"hs":30,"sp":1.5},{"wk":3,"d":"2026-09-28","a":"PHI","h":"CHI","n":0,"as":7,"hs":27,"sp":-3.5},{"wk":4,"d":"2026-10-01","a":"PIT","h":"CLE","n":0,"as":24,"hs":27,"sp":-2.5},{"wk":4,"d":"2026-10-04","a":"IND","h":"WAS","n":1,"as":30,"hs":13,"sp":-4.5},{"wk":4,"d":"2026-10-04","a":"TEN","h":"BAL","n":0,"as":18,"hs":24,"sp":11.5},{"wk":4,"d":"2026-10-04","a":"NE","h":"BUF","n":0,"as":29,"hs":26,"sp":7.0},{"wk":4,"d":"2026-10-04","a":"NYJ","h":"CHI","n":0,"as":12,"hs":23,"sp":3.5},{"wk":4,"d":"2026-10-04","a":"JAX","h":"CIN","n":0,"as":22,"hs":17,"sp":2.5},{"wk":4,"d":"2026-10-04","a":"DAL","h":"HOU","n":0,"as":34,"hs":30,"sp":3.0},{"wk":4,"d":"2026-10-04","a":"ARI","h":"NYG","n":0,"as":24,"hs":36,"sp":-2.5},{"wk":4,"d":"2026-10-04","a":"LA","h":"PHI","n":0,"as":24,"hs":20,"sp":-3.5},{"wk":4,"d":"2026-10-04","a":"GB","h":"TB","n":0,"as":17,"hs":14,"sp":-3.0},{"wk":4,"d":"2026-10-04","a":"MIA","h":"MIN","n":0,"as":10,"hs":15,"sp":10.0},{"wk":4,"d":"2026-10-04","a":"KC","h":"LV","n":0,"as":30,"hs":27,"sp":-4.5},{"wk":4,"d":"2026-10-04","a":"LAC","h":"SEA","n":0,"as":23,"hs":30,"sp":7.0},{"wk":4,"d":"2026-10-04","a":"DEN","h":"SF","n":0,"as":14,"hs":24,"sp":3.0},{"wk":4,"d":"2026-10-04","a":"DET","h":"CAR","n":0,"as":26,"hs":32,"sp":-4.5},{"wk":4,"d":"2026-10-05","a":"ATL","h":"NO","n":0,"as":45,"hs":24,"sp":1.5},{"wk":5,"d":"2026-10-08","a":"TB","h":"DAL","n":0,"as":24,"hs":16,"sp":9.5},{"wk":5,"d":"2026-10-11","a":"PHI","h":"JAX","n":1,"as":17,"hs":19,"sp":7.5},{"wk":5,"d":"2026-10-11","a":"CHI","h":"GB","n":0,"as":7,"hs":31,"sp":-1.5},{"wk":5,"d":"2026-10-11","a":"CIN","h":"MIA","n":0,"as":31,"hs":24,"sp":-7.0},{"wk":5,"d":"2026-10-11","a":"LV","h":"NE","n":0,"as":17,"hs":45,"sp":3.5},{"wk":5,"d":"2026-10-11","a":"MIN","h":"NO","n":0,"as":23,"hs":13,"sp":-2.5},{"wk":5,"d":"2026-10-11","a":"CLE","h":"NYJ","n":0,"as":12,"hs":17,"sp":2.5},{"wk":5,"d":"2026-10-11","a":"IND","h":"PIT","n":0,"as":22,"hs":34,"sp":3.0},{"wk":5,"d":"2026-10-11","a":"HOU","h":"TEN","n":0,"as":26,"hs":3,"sp":-6.5},{"wk":5,"d":"2026-10-11","a":"NYG","h":"WAS","n":0,"as":27,"hs":27,"sp":3.5},{"wk":5,"d":"2026-10-11","a":"DEN","h":"LAC","n":0,"as":23,"hs":17,"sp":-3.5},{"wk":5,"d":"2026-10-11","a":"DET","h":"ARI","n":0,"as":45,"hs":21,"sp":-5.5},{"wk":5,"d":"2026-10-11","a":"SF","h":"SEA","n":0,"as":32,"hs":29,"sp":3.0},{"wk":5,"d":"2026-10-11","a":"BAL","h":"ATL","n":0,"as":30,"hs":23,"sp":3.5},{"wk":5,"d":"2026-10-12","a":"BUF","h":"LA","n":0,"as":37,"hs":34,"sp":3.5},{"wk":6,"d":"2026-10-15","a":"SEA","h":"DEN","n":0,"as":14,"hs":17,"sp":-2.5},{"wk":6,"d":"2026-10-18","a":"HOU","h":"JAX","n":1,"as":34,"hs":31,"sp":2.5},{"wk":6,"d":"2026-10-18","a":"CHI","h":"ATL","n":0,"as":31,"hs":23,"sp":-1.5},{"wk":6,"d":"2026-10-18","a":"BAL","h":"CLE","n":0,"as":10,"hs":13,"sp":-3.0},{"wk":6,"d":"2026-10-18","a":"TEN","h":"IND","n":0,"as":26,"hs":20,"sp":6.5},{"wk":6,"d":"2026-10-18","a":"NYJ","h":"NE","n":0,"as":19,"hs":26,"sp":7.5},{"wk":6,"d":"2026-10-18","a":"NO","h":"NYG","n":0,"as":34,"hs":27,"sp":-1.5},{"wk":6,"d":"2026-10-18","a":"CAR","h":"PHI","n":0,"as":25,"hs":14,"sp":-3.0},{"wk":6,"d":"2026-10-18","a":"PIT","h":"TB","n":0,"as":26,"hs":19,"sp":-2.5},{"wk":6,"d":"2026-10-18","a":"ARI","h":"LA","n":0,"as":18,"hs":16,"sp":12.5},{"wk":6,"d":"2026-10-18","a":"LAC","h":"KC","n":0,"as":6,"hs":22,"sp":7.5},{"wk":6,"d":"2026-10-18","a":"BUF","h":"LV","n":0,"as":33,"hs":30,"sp":-5.5},{"wk":6,"d":"2026-10-18","a":"DAL","h":"GB","n":0,"as":13,"hs":23,"sp":-1.5},{"wk":6,"d":"2026-10-19","a":"WAS","h":"SF","n":0,"as":17,"hs":23,"sp":7.5},{"wk":7,"d":"2026-10-22","a":"NE","h":"CHI","n":0,"as":24,"hs":30,"sp":3.0},{"wk":7,"d":"2026-10-25","a":"PIT","h":"NO","n":1,"as":16,"hs":10,"sp":-3.0},{"wk":7,"d":"2026-10-25","a":"SF","h":"ATL","n":0,"as":20,"hs":29,"sp":-2.5},{"wk":7,"d":"2026-10-25","a":"CIN","h":"BAL","n":0,"as":35,"hs":13,"sp":-3.0},{"wk":7,"d":"2026-10-25","a":"TB","h":"CAR","n":0,"as":43,"hs":13,"sp":3.0},{"wk":7,"d":"2026-10-25","a":"NYG","h":"HOU","n":0,"as":27,"hs":21,"sp":10.0},{"wk":7,"d":"2026-10-25","a":"IND","h":"MIN","n":0,"as":10,"hs":16,"sp":6.5},{"wk":7,"d":"2026-10-25","a":"MIA","h":"NYJ","n":0,"as":28,"hs":25,"sp":3.5},{"wk":7,"d":"2026-10-25","a":"CLE","h":"TEN","n":0,"as":27,"hs":24,"sp":-1.5},{"wk":7,"d":"2026-10-25","a":"DEN","h":"ARI","n":0,"as":30,"hs":16,"sp":-4.5},{"wk":7,"d":"2026-10-25","a":"GB","h":"DET","n":0,"as":17,"hs":20,"sp":3.5},{"wk":7,"d":"2026-10-25","a":"LA","h":"LV","n":0,"as":35,"hs":21,"sp":-3.5},{"wk":7,"d":"2026-10-25","a":"KC","h":"SEA","n":0,"as":3,"hs":20,"sp":3.0},{"wk":7,"d":"2026-10-26","a":"DAL","h":"PHI","n":0,"as":38,"hs":21,"sp":-4.5},{"wk":8,"d":"2026-10-29","a":"CAR","h":"GB","n":0,"as":19,"hs":27,"sp":3.5},{"wk":8,"d":"2026-11-01","a":"BAL","h":"BUF","n":0,"as":null,"hs":null,"sp":3.0},{"wk":8,"d":"2026-11-01","a":"TEN","h":"CIN","n":0,"as":null,"hs":null,"sp":12.5},{"wk":8,"d":"2026-11-01","a":"ARI","h":"DAL","n":0,"as":null,"hs":null,"sp":7.0},{"wk":8,"d":"2026-11-01","a":"MIN","h":"DET","n":0,"as":null,"hs":null,"sp":3.0},{"wk":8,"d":"2026-11-01","a":"IND","h":"JAX","n":0,"as":null,"hs":null,"sp":10.0},{"wk":8,"d":"2026-11-01","a":"LV","h":"NYJ","n":0,"as":null,"hs":null,"sp":1.5},{"wk":8,"d":"2026-11-01","a":"CLE","h":"PIT","n":0,"as":null,"hs":null,"sp":3.5},{"wk":8,"d":"2026-11-01","a":"ATL","h":"TB","n":0,"as":null,"hs":null,"sp":2.5},{"wk":8,"d":"2026-11-01","a":"LAC","h":"LA","n":0,"as":null,"hs":null,"sp":6.5},{"wk":8,"d":"2026-11-01","a":"KC","h":"DEN","n":0,"as":null,"hs":null,"sp":-1.5},{"wk":8,"d":"2026-11-01","a":"NE","h":"MIA","n":0,"as":null,"hs":null,"sp":-7.0},{"wk":8,"d":"2026-11-01","a":"PHI","h":"WAS","n":0,"as":null,"hs":null,"sp":6.0},{"wk":8,"d":"2026-11-02","a":"CHI","h":"SEA","n":0,"as":null,"hs":null,"sp":3.0},{"wk":9,"d":"2026-11-05","a":"JAX","h":"BAL","n":0,"as":null,"hs":null,"sp":3.0},{"wk":9,"d":"2026-11-08","a":"CIN","h":"ATL","n":1,"as":null,"hs":null,"sp":-3.0},{"wk":9,"d":"2026-11-08","a":"DEN","h":"CAR","n":0,"as":null,"hs":null,"sp":-2.5},{"wk":9,"d":"2026-11-08","a":"DAL","h":"IND","n":0,"as":null,"hs":null,"sp":-4.5},{"wk":9,"d":"2026-11-08","a":"NYJ","h":"KC","n":0,"as":null,"hs":null,"sp":9.5},{"wk":9,"d":"2026-11-08","a":"DET","h":"MIA","n":0,"as":null,"hs":null,"sp":-7.0},{"wk":9,"d":"2026-11-08","a":"CLE","h":"NO","n":0,"as":null,"hs":null,"sp":2.5},{"wk":9,"d":"2026-11-08","a":"NYG","h":"PHI","n":0,"as":null,"hs":null,"sp":-1.5},{"wk":9,"d":"2026-11-08","a":"LA","h":"WAS","n":0,"as":null,"hs":null,"sp":-5.5},{"wk":9,"d":"2026-11-08","a":"HOU","h":"LAC","n":0,"as":null,"hs":null,"sp":-3.5},{"wk":9,"d":"2026-11-08","a":"LV","h":"SF","n":0,"as":null,"hs":null,"sp":9.5},{"wk":9,"d":"2026-11-08","a":"GB","h":"NE","n":0,"as":null,"hs":null,"sp":2.5},{"wk":9,"d":"2026-11-08","a":"ARI","h":"SEA","n":0,"as":null,"hs":null,"sp":10.5},{"wk":9,"d":"2026-11-08","a":"TB","h":"CHI","n":0,"as":null,"hs":null,"sp":6.0},{"wk":9,"d":"2026-11-09","a":"BUF","h":"MIN","n":0,"as":null,"hs":null,"sp":-2.5},{"wk":10,"d":"2026-11-12","a":"WAS","h":"NYG","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"NE","h":"DET","n":1,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"KC","h":"ATL","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"HOU","h":"CLE","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"MIN","h":"GB","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"MIA","h":"IND","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"CAR","h":"NO","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"BUF","h":"NYJ","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"JAX","h":"TEN","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"LA","h":"ARI","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"SEA","h":"LV","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"SF","h":"DAL","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-15","a":"PIT","h":"CIN","n":0,"as":null,"hs":null,"sp":null},{"wk":10,"d":"2026-11-16","a":"LAC","h":"BAL","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-19","a":"IND","h":"HOU","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"MIA","h":"BUF","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"BAL","h":"CAR","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"NO","h":"CHI","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"TEN","h":"DAL","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"TB","h":"DET","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"ARI","h":"KC","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"JAX","h":"NYG","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"NYJ","h":"LAC","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"LV","h":"DEN","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"PIT","h":"PHI","n":0,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-22","a":"MIN","h":"SF","n":1,"as":null,"hs":null,"sp":null},{"wk":11,"d":"2026-11-23","a":"CIN","h":"WAS","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-25","a":"GB","h":"LA","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-26","a":"CHI","h":"DET","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-26","a":"PHI","h":"DAL","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-26","a":"KC","h":"BUF","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-27","a":"DEN","h":"PIT","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"NO","h":"CIN","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"LV","h":"CLE","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"BAL","h":"HOU","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"NYG","h":"IND","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"NYJ","h":"MIA","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"ATL","h":"MIN","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"TEN","h":"JAX","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"WAS","h":"ARI","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"SEA","h":"SF","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-29","a":"NE","h":"LAC","n":0,"as":null,"hs":null,"sp":null},{"wk":12,"d":"2026-11-30","a":"CAR","h":"TB","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-03","a":"KC","h":"LA","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"DET","h":"ATL","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"JAX","h":"CHI","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"CIN","h":"CLE","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"GB","h":"NO","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"SF","h":"NYG","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"LAC","h":"TB","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"WAS","h":"TEN","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"PHI","h":"ARI","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"MIA","h":"DEN","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"CAR","h":"MIN","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"BUF","h":"NE","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-06","a":"HOU","h":"PIT","n":0,"as":null,"hs":null,"sp":null},{"wk":13,"d":"2026-12-07","a":"DAL","h":"SEA","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-10","a":"MIN","h":"NE","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"TB","h":"BAL","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"NO","h":"CAR","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"ATL","h":"CLE","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"TEN","h":"DET","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"CHI","h":"MIA","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"DEN","h":"NYJ","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"IND","h":"PHI","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"HOU","h":"WAS","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"LAC","h":"LV","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"KC","h":"CIN","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"NYG","h":"SEA","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"LA","h":"SF","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-13","a":"BUF","h":"GB","n":0,"as":null,"hs":null,"sp":null},{"wk":14,"d":"2026-12-14","a":"PIT","h":"JAX","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-17","a":"SF","h":"LAC","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-19","a":"SEA","h":"PHI","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-19","a":"CHI","h":"BUF","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"CIN","h":"CAR","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"MIA","h":"GB","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"JAX","h":"HOU","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"CLE","h":"NYG","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"BAL","h":"PIT","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"NO","h":"TB","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"IND","h":"TEN","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"ATL","h":"WAS","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"NYJ","h":"ARI","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"DAL","h":"LA","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"DEN","h":"LV","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-20","a":"DET","h":"MIN","n":0,"as":null,"hs":null,"sp":null},{"wk":15,"d":"2026-12-21","a":"NE","h":"KC","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-24","a":"HOU","h":"PHI","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-25","a":"GB","h":"CHI","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-25","a":"BUF","h":"DEN","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-25","a":"LA","h":"SEA","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"TB","h":"ATL","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"CLE","h":"BAL","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"CIN","h":"IND","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"LAC","h":"MIA","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"WAS","h":"MIN","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"ARI","h":"NO","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"NE","h":"NYJ","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"CAR","h":"PIT","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"TEN","h":"LV","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"SF","h":"KC","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-27","a":"JAX","h":"DAL","n":0,"as":null,"hs":null,"sp":null},{"wk":16,"d":"2026-12-28","a":"NYG","h":"DET","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2026-12-31","a":"BAL","h":"CIN","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"NO","h":"ATL","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"SEA","h":"CAR","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"IND","h":"CLE","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"NYG","h":"DAL","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"WAS","h":"JAX","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"KC","h":"LAC","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"BUF","h":"MIA","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"DEN","h":"NE","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"MIN","h":"NYJ","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"LA","h":"TB","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"PIT","h":"TEN","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"LV","h":"ARI","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"DET","h":"CHI","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-03","a":"PHI","h":"SF","n":0,"as":null,"hs":null,"sp":null},{"wk":17,"d":"2027-01-04","a":"HOU","h":"GB","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"SF","h":"ARI","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"PIT","h":"BAL","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"NYJ","h":"BUF","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"ATL","h":"CAR","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"CLE","h":"CIN","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"LAC","h":"DEN","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"DET","h":"GB","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"TEN","h":"HOU","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"JAX","h":"IND","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"LV","h":"KC","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"SEA","h":"LA","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"CHI","h":"MIN","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"MIA","h":"NE","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"TB","h":"NO","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"PHI","h":"NYG","n":0,"as":null,"hs":null,"sp":null},{"wk":18,"d":"2027-01-10","a":"DAL","h":"WAS","n":0,"as":null,"hs":null,"sp":null}]}/*DATA_END*/;</script>
+<script id="season-src" type="text/plain">// Season Monte Carlo. Runs inside a Web Worker (and in node for testing).
+// Input: { teams, games, mu, hfa, n, picks:{gameIndex:'h'|'a'}, sd, rSd }
+function runSeason(D) {
+  const T = D.teams.length, idx = {};
+  D.teams.forEach((t, i) => idx[t.id] = i);
+  const net = D.teams.map(t => t.off + t.def);
+  const div = D.teams.map(t => t.div), conf = D.teams.map(t => t.conf);
+  const SD = D.sd || 13.5, RSD = D.rSd == null ? 1.5 : D.rSd, N = D.n || 10000;
+  let s = (D.seed || 12345) >>> 0;
+  const rnd = () => { s += 0x6D2B79F5; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const gauss = () => { let u = 0; while (u === 0) u = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
+
+  // base tallies from completed games. Points: win 2, tie 1, loss 0.
+  const bP = new Int32Array(T), bG = new Int32Array(T), bDP = new Int32Array(T), bDG = new Int32Array(T),
+        bCP = new Int32Array(T), bCG = new Int32Array(T), bHP = new Int32Array(T * T), bHG = new Int32Array(T * T);
+  const rem = [];
+  function tally(P, G, DP, DG, CP, CG, HP, HG, h, a, hp) { // hp = home points (2/1/0)
+    const ap = 2 - hp;
+    P[h] += hp; P[a] += ap; G[h]++; G[a]++;
+    if (div[h] === div[a]) { DP[h] += hp; DP[a] += ap; DG[h]++; DG[a]++; }
+    if (conf[h] === conf[a]) { CP[h] += hp; CP[a] += ap; CG[h]++; CG[a]++; }
+    HP[h * T + a] += hp; HP[a * T + h] += ap; HG[h * T + a]++; HG[a * T + h]++;
+  }
+  D.games.forEach((g, gi) => {
+    const h = idx[g.h], a = idx[g.a];
+    if (g.hs != null) tally(bP, bG, bDP, bDG, bCP, bCG, bHP, bHG, h, a, g.hs > g.as ? 2 : g.hs < g.as ? 0 : 1);
+    else rem.push({ h, a, adv: g.n ? 0 : D.hfa, pick: D.picks && D.picks[gi] });
+  });
+
+  const out = D.teams.map(() => ({ w: 0, l: 0, t: 0, po: 0, dv: 0, s1: 0, cf: 0, sb: 0, seeds: new Array(7).fill(0), wins: new Array(18).fill(0) }));
+  const P = new Int32Array(T), G = new Int32Array(T), DP = new Int32Array(T), DG = new Int32Array(T),
+        CP = new Int32Array(T), CG = new Int32Array(T), HP = new Int32Array(T * T), HG = new Int32Array(T * T);
+  const r = new Float64Array(T), W = new Int32Array(T), L = new Int32Array(T), TI = new Int32Array(T), tb = new Float64Array(T);
+  const pct = i => G[i] ? P[i] / (2 * G[i]) : 0;
+
+  // simplified NFL tiebreakers: record, head-to-head among tied, division record (same division), conference record, coin flip
+  function rank(list) {
+    list.sort((x, y) => pct(y) - pct(x));
+    const res = [];
+    for (let i = 0; i < list.length;) {
+      let j = i; while (j < list.length && Math.abs(pct(list[j]) - pct(list[i])) < 1e-9) j++;
+      const grp = list.slice(i, j);
+      if (grp.length > 1) {
+        const sameDiv = grp.every(t => div[t] === div[grp[0]]);
+        const key = new Map();
+        for (const t of grp) {
+          let hp = 0, hg = 0;
+          for (const o of grp) if (o !== t) { hp += HP[t * T + o]; hg += HG[t * T + o]; }
+          key.set(t, [hg ? hp / (2 * hg) : 0.5, sameDiv && DG[t] ? DP[t] / (2 * DG[t]) : 0, CG[t] ? CP[t] / (2 * CG[t]) : 0, tb[t]]);
+        }
+        grp.sort((x, y) => { const a = key.get(x), b = key.get(y); for (let k = 0; k < 4; k++) if (a[k] !== b[k]) return b[k] - a[k]; return 0; });
+      }
+      res.push(...grp); i = j;
+    }
+    return res;
+  }
+  const divs = [...new Set(div)];
+  const playGame = (h, a, adv) => { const m = r[h] - r[a] + adv + SD * gauss(); return m === 0 ? (rnd() < 0.5 ? h : a) : (m > 0 ? h : a); };
+
+  for (let n = 0; n < N; n++) {
+    P.set(bP); G.set(bG); DP.set(bDP); DG.set(bDG); CP.set(bCP); CG.set(bCG); HP.set(bHP); HG.set(bHG);
+    for (let i = 0; i < T; i++) { r[i] = net[i] + RSD * gauss(); tb[i] = rnd(); }
+    for (const g of rem) {
+      let hp;
+      if (g.pick === 'h') hp = 2; else if (g.pick === 'a') hp = 0;
+      else { const m = r[g.h] - r[g.a] + g.adv + SD * gauss(); hp = Math.abs(m) < 0.05 ? 1 : m > 0 ? 2 : 0; }
+      tally(P, G, DP, DG, CP, CG, HP, HG, g.h, g.a, hp);
+    }
+    // W/L/T from points: need games; ties counted separately via exact tally
+    const champs = {};
+    for (const c of ['AFC', 'NFC']) {
+      const winners = [];
+      for (const d of divs) if (d.startsWith(c)) winners.push(rank(D.teams.map((_, i) => i).filter(i => div[i] === d))[0]);
+      const top = rank(winners);
+      const rest = rank(D.teams.map((_, i) => i).filter(i => conf[i] === c && !winners.includes(i))).slice(0, 3);
+      const seeds = top.concat(rest);
+      seeds.forEach((t, k) => { out[t].po++; out[t].seeds[k]++; if (k < 4) out[t].dv++; });
+      out[seeds[0]].s1++;
+      // playoffs: higher seed hosts; reseed after wild card
+      const alive = [seeds[0]];
+      for (const [x, y] of [[1, 6], [2, 5], [3, 4]]) alive.push(playGame(seeds[x], seeds[y], D.hfa));
+      alive.sort((x, y) => seeds.indexOf(x) - seeds.indexOf(y));
+      const d1 = playGame(alive[0], alive[3], D.hfa), d2 = playGame(alive[1], alive[2], D.hfa);
+      const [hi, lo] = seeds.indexOf(d1) < seeds.indexOf(d2) ? [d1, d2] : [d2, d1];
+      champs[c] = playGame(hi, lo, D.hfa);
+      out[champs[c]].cf++;
+    }
+    out[playGame(champs.AFC, champs.NFC, 0)].sb++;
+    for (let i = 0; i < T; i++) {
+      // derive W/L/T: ties = points parity can't tell; track via 2w+t with known games
+      const w = Math.floor(P[i] / 2), t = P[i] % 2; // approximation fixed below
+      out[i]._p = (out[i]._p || 0) + P[i];
+      out[i].wins[Math.min(17, w)]++;
+    }
+  }
+  return out.map((o, i) => {
+    const g = bG[i] + rem.filter(x => x.h === i || x.a === i).length;
+    const pts = o._p / N; // expected 2w+t
+    return { id: D.teams[i].id, expW: pts / 2, expL: g - pts / 2, po: o.po / N, dv: o.dv / N, s1: o.s1 / N, cf: o.cf / N, sb: o.sb / N,
+      seeds: o.seeds.map(x => x / N), wins: o.wins.map(x => x / N) };
+  });
+}
+if (typeof module !== 'undefined') module.exports = { runSeason };
+if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof module === 'undefined') {
+  self.onmessage = e => self.postMessage(runSeason(e.data));
+}
+</script>
+<script>// Drive-by-drive game engine. Pure: takes team ratings, returns a game log.
+const GameEngine = (() => {
+  const BASE_EPD = 1.93; // league points per drive implied by base probabilities below (calibrated)
+  function mk(seed) {
+    let s = seed >>> 0;
+    return () => { s += 0x6D2B79F5; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  }
+  const ri = (rnd, a, b) => a + Math.floor(rnd() * (b - a + 1));
+
+  // expected points for each side
+  function expected(A, H, mu, hfa, neutral) {
+    const adv = neutral ? 0 : hfa / 2;
+    return { a: mu + A.off - H.def - adv, h: mu + H.off - A.def + adv };
+  }
+
+  // one drive. k = offense strength multiplier (1 = league average). start = own yard line.
+  function drive(rnd, k, start) {
+    const fp = 1 + (start - 30) / 70;                // better field position, better odds
+    let pTD = 0.215 * Math.pow(k, 1.35) * fp, pFG = 0.165 * Math.pow(k, 0.45) * Math.sqrt(fp);
+    let pTO = 0.115 / Math.pow(k, 0.6), pDowns = 0.045 / Math.pow(k, 0.4);
+    pTD = Math.min(pTD, 0.6); pFG = Math.min(pFG, 0.3);
+    const pPunt = Math.max(0.05, 1 - pTD - pFG - pTO - pDowns);
+    const tot = pTD + pFG + pTO + pDowns + pPunt;
+    let x = rnd() * tot, type;
+    if ((x -= pTD) < 0) type = 'TD'; else if ((x -= pFG) < 0) type = 'FG'; else if ((x -= pTO) < 0) type = 'TO';
+    else if ((x -= pDowns) < 0) type = 'DOWNS'; else type = 'PUNT';
+    const toGo = 100 - start;
+    let plays, yards, secs;
+    if (type === 'TD') { yards = toGo; plays = Math.max(1, Math.round(yards / ri(rnd, 6, 11)) + ri(rnd, 0, 2)); }
+    else if (type === 'FG') { const end = ri(rnd, 3, Math.min(38, toGo - 1)); yards = Math.max(0, toGo - end); plays = Math.max(3, Math.round(yards / ri(rnd, 5, 9)) + ri(rnd, 1, 3)); }
+    else if (type === 'PUNT') { yards = Math.min(toGo - 40, ri(rnd, -5, 35)); yards = Math.max(-8, yards); plays = ri(rnd, 3, 7); }
+    else if (type === 'DOWNS') { yards = Math.min(toGo - 5, ri(rnd, 10, 55)); plays = ri(rnd, 5, 11); }
+    else { yards = Math.min(toGo - 2, ri(rnd, -5, 45)); plays = ri(rnd, 1, 8); }
+    secs = plays * ri(rnd, 19, 31) + ri(rnd, 0, 12);
+    return { type, plays, yards, secs, end: start + yards, toType: type === 'TO' ? (rnd() < 0.55 ? 'Interception' : 'Fumble') : null };
+  }
+
+  function play(opts) {
+    const { A, H, mu, hfa, neutral, playoff } = opts;
+    const rnd = mk(opts.seed == null ? (Math.random() * 2 ** 32) : opts.seed);
+    const E = expected(A, H, mu, hfa, neutral);
+    const kOf = [E.a / (BASE_EPD * 11.2), E.h / (BASE_EPD * 11.2)]; // 0 = away, 1 = home
+    const score = [0, 0], qs = [[0, 0, 0, 0], [0, 0, 0, 0]], log = [];
+    const firstBall = rnd() < 0.5 ? 0 : 1;
+    let off = firstBall, start = 35, clock = 0; // clock: seconds elapsed
+    const periodLen = 900;
+    const addPts = (team, pts, t) => { score[team] += pts; const q = Math.min(3, Math.floor(Math.max(0, t - 1) / periodLen)); if (t <= 3600) qs[team][q] += pts; else { qs[team][4] = (qs[team][4] || 0) + pts; } };
+
+    function runDrive(limit, label) {
+      const d = drive(rnd, kOf[off], start);
+      let left = limit - clock, cut = false;
+      if (d.secs > left) {
+        if ((d.type === 'TD' || d.type === 'FG') && left >= 35) d.secs = Math.max(20, left - ri(rnd, 2, 15));
+        else { d.type = 'END'; d.secs = left; cut = true; }
+      }
+      clock += d.secs;
+      let pts = 0, txt;
+      if (d.type === 'TD') { const xp = rnd() < 0.945; pts = 6 + (xp ? 1 : 0); txt = xp ? 'Touchdown' : 'Touchdown, PAT missed'; }
+      else if (d.type === 'FG') { const dist = 100 - d.end + 17; const make = rnd() < Math.max(0.35, Math.min(0.99, 1.38 - dist * 0.0125)); pts = make ? 3 : 0; txt = (make ? 'Field goal' : 'Missed FG') + ` (${dist} yd)`; d.missed = !make; d.dist = dist; }
+      else if (d.type === 'PUNT') txt = 'Punt';
+      else if (d.type === 'DOWNS') txt = 'Turnover on downs';
+      else if (d.type === 'TO') txt = d.toType;
+      else txt = label;
+      if (pts) addPts(off, pts, clock);
+      log.push({ team: off, q: Math.min(5, Math.floor(Math.max(0, clock - 1) / periodLen) + 1), clock, plays: cut ? null : d.plays, yards: cut ? null : d.yards, secs: d.secs, result: txt, pts, score: [score[0], score[1]], start });
+      // next possession start (own yard line)
+      if (d.type === 'TD' || (d.type === 'FG' && !d.missed)) start = 35;
+      else if (d.type === 'FG') start = Math.max(20, 100 - d.end);
+      else if (d.type === 'PUNT') { const land = d.end + ri(rnd, 30, 50); start = land >= 100 ? 20 : Math.max(3, 100 - land); }
+      else start = Math.max(1, Math.min(80, 100 - d.end));
+      off = 1 - off;
+      return d.type;
+    }
+    // first half
+    while (clock < 1800) runDrive(1800, 'End of half');
+    clock = 1800; off = 1 - firstBall; start = 35;
+    while (clock < 3600) runDrive(3600, 'End of regulation');
+    let ot = false;
+    if (score[0] === score[1]) {
+      ot = true; qs[0][4] = 0; qs[1][4] = 0;
+      let otNum = 0;
+      while (score[0] === score[1]) {
+        const per = playoff ? 900 : 600, otStart = 3600 + otNum * per, limit = otStart + per;
+        clock = otStart; off = rnd() < 0.5 ? 0 : 1; start = 35;
+        const firstPos = [false, false];
+        while (clock < limit) {
+          const team = off; runDrive(limit, 'End of overtime'); firstPos[team] = true;
+          if (firstPos[0] && firstPos[1] && score[0] !== score[1]) break;
+        }
+        if (!playoff) break;
+        otNum++;
+      }
+    }
+    return { score, qs, log, ot, firstBall, exp: E };
+  }
+  return { play, expected };
+})();
+if (typeof module !== 'undefined') module.exports = GameEngine;
+</script>
+<script>(() => {
+const D = DATA;
+const T = {}; D.teams.forEach(t => { t.net = t.off + t.def; T[t.id] = t; });
+const $ = s => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (k === 'style') e.style.cssText = v; else e.setAttribute(k, v); } for (const k of kids.flat()) if (k != null) e.append(k.nodeType ? k : String(k)); return e; };
+const Phi = x => { const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp(-x * x / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; };
+const fmtPct = p => p <= 0 ? '—' : p >= 0.9995 ? '100%' : p < 0.005 ? '<1%' : p > 0.995 ? '>99%' : Math.round(p * 100) + '%';
+const sign = x => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(1);
+const chip = t => el('span', { class: 'chip', style: `--c1:${t.c1};--c2:${t.c2}` }, t.id);
+
+// ---------- records from completed games
+const rec = {}; D.teams.forEach(t => rec[t.id] = { w: 0, l: 0, t: 0, pf: 0, pa: 0 });
+D.games.forEach(g => { if (g.hs == null) return; const H = rec[g.h], A = rec[g.a];
+  H.pf += g.hs; H.pa += g.as; A.pf += g.as; A.pa += g.hs;
+  if (g.hs > g.as) { H.w++; A.l++; } else if (g.hs < g.as) { A.w++; H.l++; } else { H.t++; A.t++; } });
+const recStr = id => { const r = rec[id]; return `${r.w}-${r.l}${r.t ? '-' + r.t : ''}`; };
+const remaining = D.games.map((g, i) => ({ ...g, i })).filter(g => g.hs == null);
+const firstOpenWeek = remaining.length ? remaining[0].wk : 18;
+
+// ---------- tabs / routing
+function route() {
+  const v = location.hash === '#matchup' ? 'matchup' : 'season';
+  document.querySelectorAll('[data-view]').forEach(s => s.hidden = s.dataset.view !== v);
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.go === v));
+}
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { location.hash = b.dataset.go; }));
+addEventListener('hashchange', route); route();
+
+// =================== SEASON ===================
+const S = { conf: 'NFC', sort: 'div', n: 10000, picks: {}, res: null, sel: 'SEA', wk: firstOpenWeek, running: false, queued: false };
+let worker = null;
+try { worker = new Worker(URL.createObjectURL(new Blob([$('#season-src').textContent], { type: 'text/javascript' }))); } catch (e) { worker = null; }
+let localRun = null;
+function runSims() {
+  if (S.running) { S.queued = true; return; }
+  S.running = true; $('#status').textContent = `Simulating ${S.n.toLocaleString()} seasons…`; $('#run').disabled = true;
+  const msg = { teams: D.teams, games: D.games, mu: D.mu, hfa: D.hfa, n: S.n, picks: S.picks, seed: (Math.random() * 2 ** 31) | 0 };
+  const t0 = performance.now();
+  const done = res => {
+    S.res = Object.fromEntries(res.map(r => [r.id, r])); S.running = false; $('#run').disabled = false;
+    const np = Object.keys(S.picks).length;
+    $('#status').textContent = `${S.n.toLocaleString()} seasons in ${((performance.now() - t0) / 1000).toFixed(1)}s` + (np ? ` · ${np} game${np > 1 ? 's' : ''} locked` : '');
+    renderTable(); renderTeam();
+    if (S.queued) { S.queued = false; runSims(); }
+  };
+  if (worker) { worker.onmessage = e => done(e.data); worker.postMessage(msg); }
+  else { if (!localRun) localRun = new Function($('#season-src').textContent + ';return runSeason;')(); setTimeout(() => done(localRun(msg)), 20); }
+}
+
+function pctCell(p, strong) {
+  return el('td', { class: 'pc' + (strong ? ' strong' : '') }, el('span', { class: 'bar', style: `--p:${Math.max(0, Math.min(1, p))}` }), el('span', { class: 'v' }, fmtPct(p)));
+}
+function renderTable() {
+  const body = $('#tbody'); body.textContent = '';
+  if (!S.res) return;
+  let teams = D.teams.filter(t => t.conf === S.conf);
+  const R = S.res;
+  const byPo = (a, b) => R[b.id].po - R[a.id].po || R[b.id].expW - R[a.id].expW;
+  if (S.sort === 'div') {
+    const divs = [...new Set(teams.map(t => t.div))].sort();
+    for (const d of divs) {
+      body.append(el('tr', { class: 'divrow' }, el('th', { colspan: 9, scope: 'colgroup' }, d)));
+      teams.filter(t => t.div === d).sort((a, b) => R[b.id].dv - R[a.id].dv || byPo(a, b)).forEach(t => body.append(row(t)));
+    }
+  } else {
+    const key = { po: 'po', sb: 'sb', rating: null }[S.sort];
+    teams.sort(key ? (a, b) => R[b.id][key] - R[a.id][key] || byPo(a, b) : (a, b) => b.net - a.net).forEach(t => body.append(row(t)));
+  }
+  function row(t) {
+    const r = R[t.id];
+    const tr = el('tr', { class: 'trow' + (S.sel === t.id ? ' sel' : ''), tabindex: 0, 'aria-label': `${t.name} details`,
+      onclick: () => { S.sel = t.id; renderTable(); renderTeam(); }, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); S.sel = t.id; renderTable(); renderTeam(); } } },
+      el('td', { class: 'team' }, chip(t), el('span', { class: 'tname' }, t.nick)),
+      el('td', { class: 'num' }, recStr(t.id)),
+      el('td', { class: 'num ' + (t.net >= 0 ? 'pos' : 'neg') }, sign(t.net)),
+      el('td', { class: 'num' }, `${r.expW.toFixed(1)}-${r.expL.toFixed(1)}`),
+      pctCell(r.dv), pctCell(r.po, true), pctCell(r.s1), pctCell(r.cf), pctCell(r.sb));
+    return tr;
+  }
+}
+
+function renderTeam() {
+  const box = $('#teamcard'); box.textContent = '';
+  const t = T[S.sel]; const r = S.res && S.res[t.id];
+  if (!r) return;
+  box.style.setProperty('--c1', t.c1);
+  const r0 = rec[t.id];
+  box.append(
+    el('div', { class: 'tc-head' }, chip(t), el('div', {}, el('h3', {}, t.name), el('p', { class: 'muted' }, `${recStr(t.id)} · ${t.div} · Rating ${sign(t.net)} (off ${sign(t.off)}, def ${sign(t.def)})`))),
+    el('div', { class: 'kpis' },
+      kpi('Playoffs', fmtPct(r.po)), kpi('Win division', fmtPct(r.dv)), kpi('Super Bowl', fmtPct(r.sb)), kpi('Proj. wins', r.expW.toFixed(1))));
+  // final win distribution
+  const maxW = Math.max(...r.wins);
+  const lo = r.wins.findIndex(x => x > 0.002), hi = 17 - [...r.wins].reverse().findIndex(x => x > 0.002);
+  const hist = el('div', { class: 'hist', role: 'img', 'aria-label': 'Distribution of final win totals' });
+  for (let w = Math.max(0, lo); w <= Math.min(17, hi); w++) {
+    const p = r.wins[w];
+    hist.append(el('div', { class: 'hb', title: `${w} wins: ${(p * 100).toFixed(1)}%` },
+      el('span', { class: 'hp' }, p >= 0.01 ? Math.round(p * 100) : ''),
+      el('span', { class: 'hbar', style: `height:${(p / maxW) * 100}%` }), el('span', { class: 'hl' }, w)));
+  }
+  box.append(el('h4', {}, 'Final win total'), hist);
+  // seed distribution
+  const seeds = el('div', { class: 'seeds' });
+  r.seeds.forEach((p, k) => seeds.append(el('div', { class: 'seed' + (k < 4 ? ' dw' : '') }, el('b', {}, '#' + (k + 1)), el('span', {}, fmtPct(p)))));
+  seeds.append(el('div', { class: 'seed out' }, el('b', {}, 'Out'), el('span', {}, fmtPct(1 - r.po))));
+  box.append(el('h4', {}, 'Playoff seed'), seeds);
+  // remaining schedule
+  const list = el('ol', { class: 'sched' });
+  remaining.filter(g => g.h === t.id || g.a === t.id).forEach(g => {
+    const home = g.h === t.id, opp = T[home ? g.a : g.h];
+    const m = (home ? 1 : -1) * (T[g.h].net - T[g.a].net + (g.n ? 0 : D.hfa));
+    const p = Phi(m / 13.6), pick = S.picks[g.i];
+    const locked = pick ? ((pick === 'h') === home ? 'W' : 'L') : null;
+    list.append(el('li', {}, el('span', { class: 'wk' }, 'Wk ' + g.wk), el('span', { class: 'at' }, g.n ? 'vs*' : home ? 'vs' : '@'), chip(opp),
+      el('span', { class: 'gp' + (locked ? ' locked' : '') }, locked ? `Locked ${locked}` : fmtPct(p)),
+      el('span', { class: 'mini', style: `--p:${locked ? (locked === 'W' ? 1 : 0) : p}` })));
+  });
+  box.append(el('h4', {}, 'Remaining games · win chance'), list, el('p', { class: 'foot' }, '* neutral site'));
+}
+const kpi = (k, v) => el('div', { class: 'kpi' }, el('span', { class: 'k' }, k), el('span', { class: 'v' }, v));
+
+// what-if picks
+function renderPicks() {
+  const sel = $('#wk'); if (!sel.options.length) {
+    [...new Set(remaining.map(g => g.wk))].forEach(w => sel.append(el('option', { value: w }, 'Week ' + w)));
+    sel.value = S.wk; sel.addEventListener('change', () => { S.wk = +sel.value; renderPicks(); });
+  }
+  const box = $('#picks'); box.textContent = '';
+  remaining.filter(g => g.wk === S.wk).forEach(g => {
+    const A = T[g.a], H = T[g.h], pick = S.picks[g.i];
+    const pH = Phi((H.net - A.net + (g.n ? 0 : D.hfa)) / 13.6);
+    const set = v => { if (v) S.picks[g.i] = v; else delete S.picks[g.i]; renderPicks(); runSims(); };
+    const date = new Date(g.d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    box.append(el('div', { class: 'pick', role: 'group', 'aria-label': `${A.name} at ${H.name}` },
+      el('button', { class: 'pb' + (pick === 'a' ? ' on' : ''), 'aria-pressed': pick === 'a', style: `--c1:${A.c1}`, onclick: () => set(pick === 'a' ? null : 'a') }, el('b', {}, A.id), el('small', {}, fmtPct(1 - pH))),
+      el('span', { class: 'pm' }, el('small', {}, date), g.n ? 'neutral' : '@'),
+      el('button', { class: 'pb' + (pick === 'h' ? ' on' : ''), 'aria-pressed': pick === 'h', style: `--c1:${H.c1}`, onclick: () => set(pick === 'h' ? null : 'h') }, el('b', {}, H.id), el('small', {}, fmtPct(pH)))));
+  });
+  $('#clear').disabled = !Object.keys(S.picks).length;
+}
+$('#clear').addEventListener('click', () => { S.picks = {}; renderPicks(); runSims(); });
+document.querySelectorAll('[data-conf]').forEach(b => b.addEventListener('click', () => { S.conf = b.dataset.conf; document.querySelectorAll('[data-conf]').forEach(x => x.setAttribute('aria-pressed', x === b)); const first = D.teams.find(t => t.conf === S.conf); if (T[S.sel].conf !== S.conf) S.sel = first.id; renderTable(); renderTeam(); }));
+$('#sort').addEventListener('change', e => { S.sort = e.target.value; renderTable(); });
+$('#nsims').addEventListener('change', e => { S.n = +e.target.value; runSims(); });
+$('#run').addEventListener('click', runSims);
+
+// =================== MATCHUP ===================
+const M = { a: 'CHI', h: 'SEA', neutral: false, playoff: false, timer: null };
+const aSel = $('#ma'), hSel = $('#mh');
+[...D.teams].sort((x, y) => x.name.localeCompare(y.name)).forEach(t => { aSel.append(el('option', { value: t.id }, t.name)); hSel.append(el('option', { value: t.id }, t.name)); });
+const nextGame = remaining.find(g => g.wk === firstOpenWeek && g.a === 'CHI' && g.h === 'SEA') || remaining[0];
+if (nextGame) { M.a = nextGame.a; M.h = nextGame.h; M.neutral = !!nextGame.n; }
+aSel.value = M.a; hSel.value = M.h; $('#mn').checked = M.neutral;
+aSel.addEventListener('change', () => { M.a = aSel.value; matchInfo(); });
+hSel.addEventListener('change', () => { M.h = hSel.value; matchInfo(); });
+$('#mn').addEventListener('change', e => { M.neutral = e.target.checked; matchInfo(); });
+$('#mp').addEventListener('change', e => { M.playoff = e.target.checked; matchInfo(); });
+$('#swap').addEventListener('click', () => { [M.a, M.h] = [M.h, M.a]; aSel.value = M.a; hSel.value = M.h; matchInfo(); });
+
+function lineStr(m) { // m = expected home margin
+  const fav = m >= 0 ? T[M.h] : T[M.a]; const v = Math.round(Math.abs(m) * 2) / 2;
+  return v === 0 ? 'Pick’em' : `${fav.id} −${v}`;
+}
+function matchInfo() {
+  const A = T[M.a], H = T[M.h], box = $('#minfo'); box.textContent = '';
+  $('#mplay').disabled = $('#mmany').disabled = M.a === M.h;
+  if (M.a === M.h) { box.append(el('p', { class: 'warn' }, 'Pick two different teams.')); return; }
+  const e = GameEngine.expected(A, H, D.mu, D.hfa, M.neutral);
+  const sched = D.games.find(g => g.hs == null && ((g.a === M.a && g.h === M.h) || (g.a === M.h && g.h === M.a)));
+  const items = [kpi('Model line', lineStr(e.h - e.a)), kpi('Model score', `${A.id} ${Math.round(e.a)} – ${H.id} ${Math.round(e.h)}`), kpi(`${H.id} win chance`, fmtPct(Phi((e.h - e.a) / 13.6)))];
+  if (sched && sched.sp != null && sched.a === M.a && !!sched.n === M.neutral) items.push(kpi(`Betting line (wk ${sched.wk})`, sched.sp === 0 ? 'Pick’em' : `${sched.sp > 0 ? sched.h : sched.a} −${Math.abs(sched.sp)}`));
+  box.append(...items);
+  $('#mscore').textContent = ''; $('#mlog').textContent = ''; $('#mmulti').textContent = '';
+  scoreboard(null);
+}
+function scoreboard(g) {
+  const A = T[M.a], H = T[M.h], sb = $('#mscore'); sb.textContent = '';
+  const ot = g && g.ot;
+  const head = el('tr', {}, el('th', { scope: 'col' }, g ? (g.live ? g.live : 'Final' + (ot ? '/OT' : '')) : 'Kickoff'), ...[1, 2, 3, 4].map(q => el('th', { scope: 'col' }, q)), ot ? el('th', { scope: 'col' }, 'OT') : null, el('th', { scope: 'col', class: 'tot' }, 'T'));
+  const rowFor = (t, k) => {
+    const win = g && !g.live && g.score[k] > g.score[1 - k];
+    return el('tr', { class: win ? 'win' : '' }, el('th', { scope: 'row' }, chip(t), el('span', { class: 'tname' }, t.nick)),
+      ...[0, 1, 2, 3].map(q => el('td', {}, g ? g.qs[k][q] : '–')), ot ? el('td', {}, g.qs[k][4] || 0) : null, el('td', { class: 'tot' }, g ? g.score[k] : '–'));
+  };
+  sb.append(el('table', { class: 'board' }, el('thead', {}, head), el('tbody', {}, rowFor(A, 0), rowFor(H, 1))));
+}
+const clockStr = c => { if (c > 3600) return 'OT'; const q = Math.min(4, Math.floor(Math.max(0, c - 1) / 900) + 1), left = q * 900 - c; return `Q${q} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; };
+function logRow(d) {
+  const t = d.team === 0 ? T[M.a] : T[M.h];
+  const kind = d.pts >= 6 ? 'td' : d.pts === 3 ? 'fg' : /Interception|Fumble|downs/.test(d.result) ? 'to' : '';
+  return el('li', { class: 'drive ' + kind }, el('span', { class: 'when' }, clockStr(d.clock)), chip(t),
+    el('span', { class: 'res' }, d.result), el('span', { class: 'meta' }, d.plays != null ? `${d.plays} plays, ${d.yards} yds, ${Math.floor(d.secs / 60)}:${String(d.secs % 60).padStart(2, '0')}` : ''),
+    el('span', { class: 'sc' }, `${d.score[0]}–${d.score[1]}`));
+}
+function playOne() {
+  clearInterval(M.timer);
+  const g = GameEngine.play({ A: T[M.a], H: T[M.h], mu: D.mu, hfa: D.hfa, neutral: M.neutral, playoff: M.playoff });
+  const log = $('#mlog'); log.textContent = ''; $('#mmulti').textContent = '';
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const show = n => {
+    const d = g.log[n - 1];
+    const partial = { ...g, score: d.score, live: n < g.log.length ? clockStr(d.clock) : null, qs: [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]], ot: g.ot && d.clock > 3600 };
+    g.log.slice(0, n).forEach(x => { if (x.pts) { const q = x.clock > 3600 ? 4 : Math.min(3, Math.floor((x.clock - 1) / 900)); partial.qs[x.team][q] += x.pts; } });
+    if (n === g.log.length) { partial.live = null; partial.ot = g.ot; }
+    scoreboard(partial);
+  };
+  if (reduce) { g.log.forEach(d => log.append(logRow(d))); show(g.log.length); return; }
+  let i = 0; $('#mskip').hidden = false;
+  M.finish = () => { clearInterval(M.timer); while (i < g.log.length) log.append(logRow(g.log[i++])); show(g.log.length); $('#mskip').hidden = true; };
+  M.timer = setInterval(() => { if (i >= g.log.length) { M.finish(); return; } log.append(logRow(g.log[i++])); log.lastChild.scrollIntoView({ block: 'nearest' }); show(i); }, 260);
+}
+$('#mskip').addEventListener('click', () => M.finish && M.finish());
+function playMany() {
+  clearInterval(M.timer); $('#mskip').hidden = true;
+  const N = 10000, A = T[M.a], H = T[M.h];
+  let aw = 0, hw = 0, ti = 0, sa = 0, sh = 0, ot = 0; const margins = new Map(), finals = new Map();
+  for (let i = 0; i < N; i++) {
+    const g = GameEngine.play({ A, H, mu: D.mu, hfa: D.hfa, neutral: M.neutral, playoff: M.playoff, seed: (Math.random() * 2 ** 32) >>> 0 });
+    const [x, y] = g.score; sa += x; sh += y; if (g.ot) ot++;
+    if (x > y) aw++; else if (y > x) hw++; else ti++;
+    const m = Math.max(-35, Math.min(35, y - x)); margins.set(m, (margins.get(m) || 0) + 1);
+    const k = `${x}-${y}`; finals.set(k, (finals.get(k) || 0) + 1);
+  }
+  $('#mscore').textContent = ''; $('#mlog').textContent = '';
+  const hx = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  const dist = (x, y) => Math.hypot(...hx(x).map((v, i) => v - hx(y)[i]));
+  const aCol = dist(A.c1, H.c1) < 90 ? A.c2 : A.c1;
+  const box = $('#mmulti'); box.textContent = '';
+  box.append(el('div', { class: 'kpis' }, kpi(`${A.id} wins`, (aw / N * 100).toFixed(1) + '%'), kpi(`${H.id} wins`, (hw / N * 100).toFixed(1) + '%'), ti ? kpi('Ties', (ti / N * 100).toFixed(1) + '%') : null, kpi(`Avg score (${A.id}–${H.id})`, `${(sa / N).toFixed(1)}–${(sh / N).toFixed(1)}`), kpi('Went to OT', (ot / N * 100).toFixed(1) + '%')));
+  // margin histogram, home perspective, binned by 3
+  const bins = []; for (let b = -33; b <= 33; b += 3) { let c = 0; for (let m = b - 1; m <= b + 1; m++) c += margins.get(m) || 0; bins.push([b, c / N]); }
+  const mx = Math.max(...bins.map(b => b[1]));
+  const hist = el('div', { class: 'mhist', role: 'img', 'aria-label': `Final margin distribution, ${H.id} minus ${A.id}` });
+  bins.forEach(([b, p]) => hist.append(el('div', { class: 'mb ' + (b > 0 ? 'h' : b < 0 ? 'a' : 'z'), title: `${H.id} by ${b - 1} to ${b + 1}: ${(p * 100).toFixed(1)}%`, style: `--h:${(p / mx) * 100}%;--ca:${aCol};--ch:${H.c1}` }, el('span', {}))));
+  box.append(el('h4', {}, `Final margin (${H.id} − ${A.id})`), hist, el('div', { class: 'axis' }, el('span', {}, `${A.id} by 30+`), el('span', {}, '0'), el('span', {}, `${H.id} by 30+`)));
+  const top = [...finals].sort((x, y) => y[1] - x[1]).slice(0, 6);
+  box.append(el('h4', {}, 'Most common final scores'), el('ol', { class: 'finals' }, top.map(([k, c]) => { const [x, y] = k.split('-'); return el('li', {}, el('span', {}, `${A.id} ${x} – ${H.id} ${y}`), el('span', { class: 'muted' }, (c / N * 100).toFixed(1) + '%')); })));
+}
+$('#mplay').addEventListener('click', playOne);
+$('#mmany').addEventListener('click', playMany);
+
+// ---------- boot
+if (D.season) { $('#season').textContent = D.season; document.title = `${D.season} NFL Simulator`; }
+$('#asof').textContent = new Date(D.asOf + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+$('#gamesleft').textContent = remaining.length;
+renderPicks(); matchInfo(); runSims();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Every Tuesday afternoon (after Monday Night Football), pull the latest nflverse
+# results, refresh simulator.html, and commit it. Render redeploys on the push.
+# If update_simulator.py's safety checks fail, the job stops and nothing is committed.
+name: Update simulator
+on:
+  schedule:
+    - cron: "47 18 * * 2"   # Tuesdays 18:47 UTC = 1:47 PM Eastern (2:47 PM during daylight time)
+  workflow_dispatch: {}     # lets you run it by hand from the Actions tab
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pandas numpy
+      - run: python update_simulator.py --html simulator.html
+      - name: Commit if changed
+        run: |
+          if git diff --quiet simulator.html; then echo "No new games, nothing to commit."; exit 0; fi
+          git config user.name "simulator-bot"
+          git config user.email "simulator-bot@users.noreply.github.com"
+          git add simulator.html
+          git commit -m "Update simulator with latest NFL results"
+          git push
