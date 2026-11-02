@@ -40,6 +40,11 @@ DIV_OF = {t: d for d, ts in DIVISIONS.items() for t in ts.split()}
 # Model settings (documented so changes are deliberate)
 MARKET_WEIGHT = 4.0   # one betting line counts as much as 4 actual scores
 RIDGE = 8.0           # pulls ratings toward average; larger = more cautious early in the season
+# Backtest (2012-2025, ~3,700 games, ratings fit only on games before each week): the fitted ratings are
+# too compressed -- actual margins ran ~1.25-1.3x the model's predicted margins (slope >1 in 13 of 14
+# seasons). Scaling ratings by 1.25 improves win-probability accuracy (log loss .6305 -> ~.627) and
+# stays out-of-sample (leave-one-season-out check). See backtest.py.
+RATING_SCALE = 1.25
 
 
 def load(name, data_dir):
@@ -83,7 +88,7 @@ def fit_ratings(s, teams):
     X, Y, W = np.array(rows), np.array(y), np.array(w)
     lam = np.zeros(2 * n + 2); lam[:2 * n] = RIDGE
     p = np.linalg.solve(X.T @ (X * W[:, None]) + np.diag(lam), X.T @ (W * Y))
-    off, de = p[:n] - p[:n].mean(), p[n:2 * n] - p[n:2 * n].mean()
+    off, de = (p[:n] - p[:n].mean()) * RATING_SCALE, (p[n:2 * n] - p[n:2 * n].mean()) * RATING_SCALE
     return off, de, float(p[2 * n]), float(p[2 * n + 1])
 
 
