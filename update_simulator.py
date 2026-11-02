@@ -45,6 +45,13 @@ RIDGE = 8.0           # pulls ratings toward average; larger = more cautious ear
 # seasons). Scaling ratings by 1.25 improves win-probability accuracy (log loss .6305 -> ~.627) and
 # stays out-of-sample (leave-one-season-out check). See backtest.py.
 RATING_SCALE = 1.25
+# Backtest (Nov 2): games count less as they get older (half-life 10 weeks), and last season's games are
+# blended in at half weight at the start of a season, fading to zero by Week 5. Cut the average miss
+# on game margins from ~13.40 to ~13.29 and week-1 error from ~13.8 to ~13.1 (13.35 -> 13.21 with the
+# x1.25 scale on top). See BACKTEST_RESULTS.md.
+HALF_LIFE_WEEKS = 10.0
+PRIOR_SEASON_WEIGHT = 0.5
+PRIOR_FADE_WEEKS = 4.0
 
 
 def load(name, data_dir):
@@ -59,7 +66,7 @@ def fail(msg):
     sys.exit(1)
 
 
-def fit_ratings(s, teams):
+def fit_ratings(s, teams, now_week, prev=None):
     ix = {t: i for i, t in enumerate(teams)}
     n = len(teams)
     rows, y, w = [], [], []
@@ -72,16 +79,23 @@ def fit_ratings(s, teams):
         r[2 * n + 1] = 0.5 * home  # half of home-field edge
         rows.append(r); y.append(pts); w.append(weight)
 
-    for _, g in s.iterrows():
+    # time index in weeks: this season = its week number; last season sits 22 weeks earlier
+    cur = s.assign(_t=s.week.astype(float), _sw=1.0)
+    parts = [cur]
+    carry = PRIOR_SEASON_WEIGHT * max(0.0, 1 - (now_week - 1) / PRIOR_FADE_WEEKS)
+    if prev is not None and carry > 0:
+        parts.append(prev.assign(_t=prev.week.astype(float) - 22, _sw=carry))
+    for _, g in pd.concat(parts, ignore_index=True).iterrows():
         h = 1 if g.location == "Home" else 0
+        sw = g._sw * 0.5 ** (max(now_week - g._t, 0) / HALF_LIFE_WEEKS)
         if pd.notna(g.home_score):
-            add(g.home_team, g.away_team, g.home_score, h, 1.0)
-            add(g.away_team, g.home_team, g.away_score, -h, 1.0)
+            add(g.home_team, g.away_team, g.home_score, h, 1.0 * sw)
+            add(g.away_team, g.home_team, g.away_score, -h, 1.0 * sw)
         if pd.notna(g.spread_line) and pd.notna(g.total_line):
             home_implied = (g.total_line + g.spread_line) / 2
             away_implied = (g.total_line - g.spread_line) / 2
-            add(g.home_team, g.away_team, home_implied, h, MARKET_WEIGHT)
-            add(g.away_team, g.home_team, away_implied, -h, MARKET_WEIGHT)
+            add(g.home_team, g.away_team, home_implied, h, MARKET_WEIGHT * sw)
+            add(g.away_team, g.home_team, away_implied, -h, MARKET_WEIGHT * sw)
 
     if not rows:
         fail("no scores or betting lines yet for this season")
@@ -122,7 +136,11 @@ def main():
     if ((played.home_score < 0) | (played.away_score < 0) | (played.home_score > 80) | (played.away_score > 80)).any():
         fail("a score is outside 0-80")
 
-    off, de, mu, hfa = fit_ratings(s, teams)
+    unplayed = s[s.home_score.isna()]
+    now_week = int(unplayed.week.min()) if len(unplayed) else int(s.week.max()) + 1
+    prev = reg[reg.season == season - 1].copy()
+    prev = prev[prev.home_team.isin(teams) & prev.away_team.isin(teams)]
+    off, de, mu, hfa = fit_ratings(s, teams, now_week, prev if len(prev) else None)
     if not (15 < mu < 30 and -1 < hfa < 5 and np.abs(off + de).max() < 15):
         fail(f"ratings look implausible (avg pts {mu:.1f}, home edge {hfa:.1f}, max rating {np.abs(off + de).max():.1f})")
 
