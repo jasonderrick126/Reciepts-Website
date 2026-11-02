@@ -322,6 +322,7 @@ if (typeof self !== 'undefined' && typeof window === 'undefined' && typeof modul
 </script>
 <script>// Drive-by-drive game engine. Pure: takes team ratings, returns a game log.
 const GameEngine = (() => {
+  const ENGINE_SLOPE = 0.94, GAME_NOISE = 0.10;
   const BASE_EPD = 1.93; // league points per drive implied by base probabilities below (calibrated)
   function mk(seed) {
     let s = seed >>> 0;
@@ -361,7 +362,13 @@ const GameEngine = (() => {
     const { A, H, mu, hfa, neutral, playoff } = opts;
     const rnd = mk(opts.seed == null ? (Math.random() * 2 ** 32) : opts.seed);
     const E = expected(A, H, mu, hfa, neutral);
-    const kOf = [E.a / (BASE_EPD * 11.2), E.h / (BASE_EPD * 11.2)]; // 0 = away, 1 = home
+    // Calibration (backtest Nov 2): unadjusted, the engine stretched margins ~7% too far and its games were
+    // too uniform (margin SD 12.8 vs ~13.4 in real games), which made big favorites too safe. So pull
+    // expected points slightly toward average and give each team a small random good-day/bad-day factor.
+    const gz = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+    const ea = mu + (E.a - mu) * ENGINE_SLOPE, eh = mu + (E.h - mu) * ENGINE_SLOPE;
+    const dayA = Math.exp(GAME_NOISE * gz() - GAME_NOISE * GAME_NOISE / 2), dayH = Math.exp(GAME_NOISE * gz() - GAME_NOISE * GAME_NOISE / 2);
+    const kOf = [ea / (BASE_EPD * 11.2) * dayA, eh / (BASE_EPD * 11.2) * dayH]; // 0 = away, 1 = home
     const score = [0, 0], qs = [[0, 0, 0, 0], [0, 0, 0, 0]], log = [];
     const firstBall = rnd() < 0.5 ? 0 : 1;
     let off = firstBall, start = 35, clock = 0; // clock: seconds elapsed
