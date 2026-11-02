@@ -1,10 +1,12 @@
-# Every Tuesday afternoon (after Monday Night Football), pull the latest nflverse
-# results, refresh simulator.html, and commit it. Render redeploys on the push.
+# Tuesday afternoon (after Monday Night Football): pull the latest nflverse results.
+# Friday late afternoon: refresh again so the weekend's betting lines and final
+# injury designations are included. Either way it refreshes simulator.html and commits it. Render redeploys on the push.
 # If update_simulator.py's safety checks fail, the job stops and nothing is committed.
 name: Update simulator
 on:
   schedule:
     - cron: "47 18 * * 2"   # Tuesdays 18:47 UTC = 1:47 PM Eastern (2:47 PM during daylight time)
+    - cron: "17 21 * * 5"   # Fridays 21:17 UTC = 4:17 PM Eastern (5:17 PM during daylight time), after final injury reports
   workflow_dispatch: {}     # lets you run it by hand from the Actions tab
 permissions:
   contents: write
