@@ -171,7 +171,7 @@ table.board { width: 100%; border-collapse: collapse; background: var(--ink); co
   <div class="grid">
     <div class="card tablewrap">
       <table class="odds">
-        <thead><tr><th scope="col">Team</th><th scope="col">Record</th><th scope="col" title="Points better than an average team on a neutral field">Rating</th><th scope="col">Proj. W-L</th><th scope="col">Win div</th><th scope="col">Playoffs</th><th scope="col">#1 seed</th><th scope="col">Win conf</th><th scope="col">Win SB</th></tr></thead>
+        <thead><tr><th scope="col">Team</th><th scope="col">Record</th><th scope="col" title="Points better than an average team on a neutral field">Rating</th><th scope="col">Proj. W-L</th><th scope="col">Win div</th><th scope="col">Playoffs</th><th scope="col" title="Only the #1 seed in each conference gets a first-round bye">#1 seed (bye)</th><th scope="col">Win conf</th><th scope="col">Win SB</th></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
@@ -262,27 +262,46 @@ function runSeason(D) {
   const r = new Float64Array(T), W = new Int32Array(T), L = new Int32Array(T), TI = new Int32Array(T), tb = new Float64Array(T);
   const pct = i => G[i] ? P[i] / (2 * G[i]) : 0;
 
-  // simplified NFL tiebreakers: record, head-to-head among tied, division record (same division), conference record, coin flip
+  // NFL tiebreakers (official order). Teams level on record are resolved one seat at a time (the best team is seated, then the rest restart the process).
+  //   same division:  head-to-head, division record, common games, conference record, strength of victory, strength of schedule, coin flip
+  //   different div:  head-to-head sweep, conference record, common games (min 4), strength of victory, strength of schedule, coin flip
+  // Not modelled (rare, deeper in the rulebook): point-differential tiebreakers, which fall through to the coin flip here.
+  function keyFor(t, grp, sameDiv) {
+    let hp = 0, hg = 0, played = 0;
+    for (const o of grp) if (o !== t) { hp += HP[t * T + o]; hg += HG[t * T + o]; if (HG[t * T + o]) played++; }
+    let h2h = 0.5;
+    if (grp.length === 2 || sameDiv) h2h = hg ? hp / (2 * hg) : 0.5;   // division ties: best record among the tied clubs
+    else if (hg && played === grp.length - 1) { const f = hp / (2 * hg); h2h = f === 1 || f === 0 ? f : 0.5; }   // wild-card ties of 3+ clubs: only a sweep counts
+    const dv = sameDiv && DG[t] ? DP[t] / (2 * DG[t]) : 0, cf = CG[t] ? CP[t] / (2 * CG[t]) : 0;
+    // common games: opponents that every tied team has played
+    let cp = 0, cg = 0;
+    for (let o = 0; o < T; o++) { if (grp.some(u => !HG[u * T + o])) continue; cp += HP[t * T + o]; cg += HG[t * T + o]; }
+    const cm = cg && (sameDiv || cg >= 4) ? cp / (2 * cg) : 0;
+    let vw = 0, vg = 0, sw = 0, sg = 0;
+    for (let o = 0; o < T; o++) { const g = HG[t * T + o]; if (!g) continue; sw += g * pct(o); sg += g; const wn = HP[t * T + o] / 2; if (wn > 0) { vw += wn * pct(o); vg += wn; } }
+    const sov = vg ? vw / vg : 0, sos = sg ? sw / sg : 0;
+    return sameDiv ? [h2h, dv, cm, cf, sov, sos, tb[t]] : [h2h, cf, cm, sov, sos, tb[t]];
+  }
   function rank(list) {
     list.sort((x, y) => pct(y) - pct(x));
     const res = [];
     for (let i = 0; i < list.length;) {
       let j = i; while (j < list.length && Math.abs(pct(list[j]) - pct(list[i])) < 1e-9) j++;
-      const grp = list.slice(i, j);
+      let grp = list.slice(i, j);
       if (grp.length > 1) {
         const sameDiv = grp.every(t => div[t] === div[grp[0]]);
-        const key = new Map();
-        for (const t of grp) {
-          let hp = 0, hg = 0;
-          for (const o of grp) if (o !== t) { hp += HP[t * T + o]; hg += HG[t * T + o]; }
-          key.set(t, [hg ? hp / (2 * hg) : 0.5, sameDiv && DG[t] ? DP[t] / (2 * DG[t]) : 0, CG[t] ? CP[t] / (2 * CG[t]) : 0, tb[t]]);
+        while (grp.length > 1) {
+          let best = null, bk = null;
+          for (const t of grp) { const k = keyFor(t, grp, sameDiv); if (!bk || cmpKey(k, bk) > 0) { best = t; bk = k; } }
+          res.push(best); grp = grp.filter(t => t !== best);
         }
-        grp.sort((x, y) => { const a = key.get(x), b = key.get(y); for (let k = 0; k < 4; k++) if (a[k] !== b[k]) return b[k] - a[k]; return 0; });
-      }
-      res.push(...grp); i = j;
+        res.push(grp[0]);
+      } else res.push(...grp);
+      i = j;
     }
     return res;
   }
+  function cmpKey(a, b) { for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return a[k] - b[k]; return 0; }
   const divs = [...new Set(div)];
   const playGame = (h, a, adv) => { const m = r[h] - r[a] + adv + SD * gauss(); return m === 0 ? (rnd() < 0.5 ? h : a) : (m > 0 ? h : a); };
 
