@@ -61,6 +61,73 @@ def load(name, data_dir):
         return pd.read_csv(io.BytesIO(r.read()))
 
 
+# Quarterback adjustment (Matchup tab "who's playing" control). Each QB gets a rating: passing EPA per dropback,
+# pulled toward -0.08 (a replacement-level QB) by 300 dropbacks of doubt. Backtest 2012-2025: moving a team's
+# expected margin by 20 points per 1.0 of EPA/dropback (relative to what its recent starters implied) with the
+# true starter known cut the average miss from 13.28 to 13.18 overall and 13.88 to 13.49 in games where the QB changed.
+QB_BETA = 20.0
+QB_SHRINK = 300.0
+QB_PRIOR = -0.08
+QB_YEARS_BACK = 4
+STATS_URLS = ("https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_{y}.csv",
+              "https://github.com/nflverse/nflverse-data/releases/download/player_stats/stats_player_week_{y}.csv")
+
+
+def fetch_weekly_stats(year):
+    for url in STATS_URLS:
+        try:
+            with urllib.request.urlopen(url.format(y=year), timeout=90) as r:
+                df = pd.read_csv(io.BytesIO(r.read()), low_memory=False,
+                                 usecols=["player_id", "season", "season_type", "attempts", "sacks_suffered", "passing_epa"])
+            if len(df) > 1000:
+                return df
+        except Exception:
+            continue
+    return None
+
+
+def build_qbs(reg, season, teams):
+    """Per-team quarterback list for the Matchup tab. Returns None if the stats can't be fetched
+    (the page then simply hides the QB controls; the rest of the update is unaffected)."""
+    frames = [fetch_weekly_stats(y) for y in range(season - QB_YEARS_BACK, season + 1)]
+    frames = [f for f in frames if f is not None]
+    if len(frames) < 3:
+        print("note: quarterback stats unavailable, QB controls will be hidden", file=sys.stderr)
+        return None
+    st = pd.concat(frames)
+    st = st[(st.season_type == "REG") & st.passing_epa.notna()]
+    st = st.assign(db=st.attempts.fillna(0) + st.sacks_suffered.fillna(0))
+    g = st.groupby("player_id").agg(epa=("passing_epa", "sum"), db=("db", "sum"))
+    rate = ((g.epa + QB_SHRINK * QB_PRIOR) / (g.db + QB_SHRINK)).to_dict()
+    r_of = lambda q: rate.get(q, QB_PRIOR)
+
+    recent = reg[(reg.season >= season - 1) & reg.home_score.notna()].sort_values(["gameday", "week"])
+    out = {}
+    for t in teams:
+        rows = []
+        for _, x in recent[(recent.home_team == t) | (recent.away_team == t)].iterrows():
+            home = x.home_team == t
+            rows.append((x.home_qb_id if home else x.away_qb_id, x.home_qb_name if home else x.away_qb_name, x.season))
+        rows = [r for r in rows if isinstance(r[0], str)]
+        if not rows:
+            continue
+        hist = [r[0] for r in rows]
+        names = {r[0]: r[1] for r in rows}
+        starts = pd.Series([r[0] for r in rows if r[2] == season] or hist).value_counts()
+        last = hist[-1]
+        order = [last] + [q for q in starts.index if q != last]
+        seen = pd.Series(hist).value_counts()
+        for q in seen.index:
+            if q not in order:
+                order.append(q)
+        out[t] = {"d": last, "i": round(float(np.mean([r_of(q) for q in hist[-6:]])), 3),
+                  "l": [{"id": q, "n": names[q], "r": round(float(r_of(q)), 3), "s": int(seen[q])} for q in order[:6]]}
+    if len(out) < 30:
+        print("note: too few teams with quarterback data, QB controls will be hidden", file=sys.stderr)
+        return None
+    return out
+
+
 def fail(msg):
     print(f"STOPPED, page not changed: {msg}", file=sys.stderr)
     sys.exit(1)
@@ -154,6 +221,7 @@ def main():
         "teams": [{"id": t, "name": tm.loc[t, "full"], "nick": tm.loc[t, "nickname"], "div": DIV_OF[t],
                    "conf": DIV_OF[t][:3], "c1": tc.loc[t, "color"], "c2": tc.loc[t, "color2"],
                    "off": round(float(off[ix[t]]), 2), "def": round(float(de[ix[t]]), 2)} for t in teams],
+        "qbBeta": QB_BETA,
         "games": [{"wk": int(g.week), "d": g.gameday, "a": g.away_team, "h": g.home_team,
                    "n": int(g.location != "Home"),
                    "as": None if pd.isna(g.away_score) else int(g.away_score),
@@ -161,6 +229,10 @@ def main():
                    "sp": None if pd.isna(g.spread_line) else float(g.spread_line),
                    "tl": None if pd.isna(g.total_line) else float(g.total_line)} for _, g in s.iterrows()],
     }
+
+    qbs = build_qbs(reg, season, teams)
+    if qbs:
+        data["qbs"] = qbs
 
     with open(a.html, encoding="utf-8") as f:
         page = f.read()
