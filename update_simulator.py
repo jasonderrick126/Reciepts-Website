@@ -234,6 +234,21 @@ def main():
     if qbs:
         data["qbs"] = qbs
 
+    # ---- rating history: what the ratings were after each completed week (k = 0 is preseason).
+    # The page replays the season simulation at each point to draw "how the odds changed".
+    hist = []
+    for k in range(0, now_week):
+        sk = s[s.week <= k + 1].copy()
+        late = sk.week == k + 1
+        sk.loc[late, ["home_score", "away_score"]] = np.nan       # that week's betting lines are known, its scores are not
+        try:
+            o_k, d_k, _, _ = fit_ratings(sk, teams, k + 1, prev if len(prev) else None)
+        except SystemExit:
+            continue
+        hist.append({"k": k, "net": [round(float(o_k[ix[t]] + d_k[ix[t]]), 2) for t in teams]})
+    if hist:
+        data["hist"] = hist
+
     with open(a.html, encoding="utf-8") as f:
         page = f.read()
     pat = re.compile(r"/\*DATA_START\*/.*?/\*DATA_END\*/", re.S)
