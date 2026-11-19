@@ -186,7 +186,7 @@ table.board { width: 100%; border-collapse: collapse; background: var(--ink); co
   </div>
   <div class="howto">
     <p><b>How it works.</b> Each team gets an offense and defense rating, fit from every 2026 score so far plus the betting market’s spreads and totals (which carry injury and QB news the scores don’t). Games that already have a posted betting line use that line. Recent games count more than older ones, and early in the season last year’s results are blended in until about Week 5. Each remaining game is simulated with a typical NFL spread of outcomes (±13.5 points), and each simulated season also nudges every team’s true strength up or down a bit, since ratings after 8 weeks are uncertain.</p>
-    <p><b>Simplifications.</b> Tiebreakers use record, head-to-head, division record, conference record, then a coin flip (the NFL’s full list goes deeper). Seven teams per conference make the playoffs; the higher seed hosts; ratings don’t change mid-season.</p>
+    <p><b>Simplifications.</b> Tiebreakers follow the NFL’s order (head-to-head, division and conference record, common games, strength of victory and schedule), then a coin flip; point-differential tiebreakers aren’t modelled. Seven teams per conference make the playoffs; the higher seed hosts; only the #1 seed gets a bye; ratings don’t change mid-season, but each simulated season draws its own team-strength errors so the odds aren’t overconfident. Share image saves a card you can post.</</p>
   </div>
 </section>
 
@@ -208,6 +208,7 @@ table.board { width: 100%; border-collapse: collapse; background: var(--ink); co
   <div class="toolbar" style="margin-top:0">
     <button class="btn" id="mplay">Play one game</button>
     <button class="btn ghost" id="mmany">Simulate 100,000 games</button>
+    <button class="btn ghost" id="mshare">Share image</button>
     <button class="btn ghost" id="mskip" hidden>Skip to final</button>
   </div>
   <div class="mlay">
@@ -551,6 +552,7 @@ function renderTeam() {
     el('div', { class: 'tc-head' }, chip(t), el('div', {}, el('h3', {}, t.name), el('p', { class: 'muted' }, `${recStr(t.id)} · ${t.div} · Rating ${sign(t.net)} (off ${sign(t.off)}, def ${sign(t.def)})`))),
     el('div', { class: 'kpis' },
       kpi('Playoffs', fmtPct(r.po)), kpi('Win division', fmtPct(r.dv)), kpi('Super Bowl', fmtPct(r.sb)), kpi('Proj. wins', r.expW.toFixed(1))));
+  box.append(el('button', { class: 'btn ghost', type: 'button', onclick: () => shareTeam(t) }, 'Share image'));
   // final win distribution
   const maxW = Math.max(...r.wins);
   const lo = r.wins.findIndex(x => x > 0.002), hi = 17 - [...r.wins].reverse().findIndex(x => x > 0.002);
@@ -581,6 +583,77 @@ function renderTeam() {
   box.append(el('h4', {}, 'Remaining games · win chance'), list, el('p', { class: 'foot' }, '* neutral site'));
 }
 const kpi = (k, v) => el('div', { class: 'kpi' }, el('span', { class: 'k' }, k), el('span', { class: 'v' }, v));
+
+
+// ---- Share images: draw a card on a canvas, then use the phone's share sheet (or download a PNG) ----
+const FONT = '-apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const lum = c => { const n = parseInt(c.slice(1), 16), f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(n >> 16 & 255) + 0.7152 * f(n >> 8 & 255) + 0.0722 * f(n & 255); };
+const tcol = t => lum(t.c1) > 0.06 ? t.c1 : (t.c2 && lum(t.c2) > 0.06 ? t.c2 : '#94a1b3');   // keeps near-black team colours visible on the dark card
+function cardCanvas(w, h, ca, cb) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  x.fillStyle = '#0c121b'; x.fillRect(0, 0, w, h);
+  const g = x.createLinearGradient(0, 0, w, 0); g.addColorStop(0, ca); g.addColorStop(1, cb); x.fillStyle = g; x.fillRect(0, 0, w, 14);
+  return [c, x];
+}
+function txt(x, t, px, py, size, color, weight = 500, align = 'left') { x.font = `${weight} ${size}px ${FONT}`; x.fillStyle = color; x.textAlign = align; x.textBaseline = 'alphabetic'; x.fillText(t, px, py); }
+function cardFrame(x, w, h, tag) {
+  txt(x, 'RECEIPTS', 56, 62, 22, '#ff5a5f', 800); txt(x, `${tag} · ${D.season} NFL simulator`, 184, 62, 22, '#94a1b3', 500);
+  txt(x, 'receiptssports.com', w - 56, h - 34, 22, '#e7ecf2', 700, 'right');
+  txt(x, `Model as of ${D.asOf}. Not betting advice.`, 56, h - 34, 20, '#94a1b3', 500);
+}
+async function shareCanvas(c, name) {
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const file = new File([blob], name, { type: 'image/png' });
+  try { if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Receipts simulator' }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const qbName = id => { const sel = $('#' + id); return sel && !$('#mqrow').hidden && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent.replace(/ \(usual starter\)$/, '').replace(/ \(average backup\)$/, '') : ''; };
+function shareMatchup() {
+  if (M.a === M.h) return;
+  const A = T[M.a], H = T[M.h], e = GameEngine.expected(A, H, D.mu, D.hfa, M.neutral, M.adjA, M.adjH);
+  const W = 1200, Hh = 675, [c, x] = cardCanvas(W, Hh, tcol(A), tcol(H)); cardFrame(x, W, Hh, 'Matchup');
+  const pH = Phi((e.h - e.a) / 13.6), pA = 1 - pH, mid = W / 2;
+  [[A, 0, qbName('mqa'), 'AWAY'], [H, 1, qbName('mqh'), M.neutral ? 'NEUTRAL' : 'HOME']].forEach(([t, k, q, lab]) => {
+    const cx = k ? W - 250 : 250;
+    x.fillStyle = tcol(t); x.fillRect(cx - 140, 118, 280, 6);
+    txt(x, t.id, cx, 250, 130, '#e7ecf2', 800, 'center'); txt(x, t.name, cx, 296, 26, '#e7ecf2', 600, 'center');
+    txt(x, `${lab} · ${recStr(t.id)} · rating ${sign(t.net)}`, cx, 332, 20, '#94a1b3', 500, 'center');
+    if (q) txt(x, 'QB: ' + q, cx, 364, 20, '#94a1b3', 500, 'center');
+  });
+  txt(x, 'MODEL LINE', mid, 190, 20, '#94a1b3', 700, 'center'); txt(x, lineStr(e.h - e.a), mid, 262, 64, '#ff5a5f', 800, 'center');
+  txt(x, `${A.id} ${Math.round(e.a)} – ${H.id} ${Math.round(e.h)}`, mid, 318, 36, '#e7ecf2', 700, 'center');
+  txt(x, `Total ${(Math.round((e.h + e.a) * 2) / 2).toFixed(1)}`, mid, 360, 24, '#94a1b3', 600, 'center');
+  // win-chance bar
+  const bx = 56, bw = W - 112, by = 430, bh = 46;
+  x.fillStyle = tcol(A); x.fillRect(bx, by, bw * pA, bh); x.fillStyle = tcol(H) === tcol(A) ? '#5d6878' : tcol(H); x.fillRect(bx + bw * pA, by, bw * pH, bh);
+  x.fillStyle = '#0c121b'; x.fillRect(bx + bw * pA - 2, by - 6, 4, bh + 12);
+  txt(x, `${A.id} ${Math.round(pA * 100)}%`, bx + 14, by + 32, 26, '#ffffff', 800); txt(x, `${Math.round(pH * 100)}% ${H.id}`, bx + bw - 14, by + 32, 26, '#ffffff', 800, 'right');
+  txt(x, 'WIN CHANCE', mid, by - 16, 18, '#94a1b3', 700, 'center');
+  txt(x, `Fair moneyline: ${A.id} ${fairML(pA)}   ·   ${H.id} ${fairML(pH)}`, mid, 540, 26, '#e7ecf2', 600, 'center');
+  const sched = D.games.find(g => g.hs == null && g.a === M.a && g.h === M.h && !!g.n === M.neutral);
+  if (sched && sched.sp != null) txt(x, `Posted line: ${sched.sp === 0 ? 'Pick’em' : (sched.sp > 0 ? sched.h : sched.a) + ' −' + Math.abs(sched.sp)}`, mid, 580, 22, '#94a1b3', 500, 'center');
+  shareCanvas(c, `${M.a}-at-${M.h}-receipts.png`);
+}
+function shareTeam(t) {
+  const r = S.res && S.res[t.id]; if (!r) return;
+  const W = 1200, Hh = 675, [c, x] = cardCanvas(W, Hh, tcol(t), tcol({ c1: t.c2 || t.c1, c2: t.c1 })); cardFrame(x, W, Hh, 'Season odds');
+  txt(x, t.name.toUpperCase(), 56, 150, 54, '#e7ecf2', 800);
+  txt(x, `${recStr(t.id)} · ${t.div} · rating ${sign(t.net)}`, 56, 192, 24, '#94a1b3', 500);
+  const k = [['Playoffs', fmtPct(r.po)], ['Win division', fmtPct(r.dv)], ['#1 seed (bye)', fmtPct(r.s1)], ['Super Bowl', fmtPct(r.sb)], ['Proj. wins', r.expW.toFixed(1)]];
+  k.forEach(([lab, v], i) => { const kx = 56 + i * 222; txt(x, v, kx, 290, 58, i === 3 ? '#ff5a5f' : '#e7ecf2', 800); txt(x, lab.toUpperCase(), kx, 322, 17, '#94a1b3', 700); });
+  const lo = Math.max(0, r.wins.findIndex(v => v > 0.002)), hi = Math.min(17, 17 - [...r.wins].reverse().findIndex(v => v > 0.002)), mx = Math.max(...r.wins);
+  const n = hi - lo + 1, gw = Math.min(64, (W - 112) / n), x0 = (W - gw * n) / 2, base = 570, ph = 170;
+  txt(x, 'FINAL WIN TOTAL', 56, 372, 18, '#94a1b3', 700);
+  for (let w = lo; w <= hi; w++) {
+    const p = r.wins[w], bh = Math.max(2, p / mx * ph), bx = x0 + (w - lo) * gw;
+    x.fillStyle = tcol(t); x.fillRect(bx + 5, base - bh, gw - 10, bh);
+    if (p >= 0.01) txt(x, Math.round(p * 100) + '%', bx + gw / 2, base - bh - 8, 18, '#e7ecf2', 700, 'center');
+    txt(x, String(w), bx + gw / 2, base + 26, 20, '#94a1b3', 600, 'center');
+  }
+  const nPicks = Object.keys(S.picks || {}).length;
+  txt(x, `${(S.n || 10000).toLocaleString()} simulated seasons${nPicks ? ' · includes ' + nPicks + ' what-if pick' + (nPicks > 1 ? 's' : '') : ''}`, W - 56, 192, 20, '#94a1b3', 500, 'right');
+  shareCanvas(c, `${t.id}-season-odds-receipts.png`);
+}
 
 // what-if picks
 function renderPicks() {
@@ -656,7 +729,7 @@ function syncQB() {
 function matchInfo() {
   syncQB();
   const A = T[M.a], H = T[M.h], box = $('#minfo'); box.textContent = '';
-  $('#mplay').disabled = $('#mmany').disabled = M.a === M.h;
+  $('#mplay').disabled = $('#mmany').disabled = $('#mshare').disabled = M.a === M.h;
   if (M.a === M.h) { box.append(el('p', { class: 'warn' }, 'Pick two different teams.')); return; }
   const e = GameEngine.expected(A, H, D.mu, D.hfa, M.neutral, M.adjA, M.adjH);
   const sched = D.games.find(g => g.hs == null && ((g.a === M.a && g.h === M.h) || (g.a === M.h && g.h === M.a)));
@@ -703,6 +776,7 @@ function playOne() {
   M.timer = setInterval(() => { if (i >= g.log.length) { M.finish(); return; } log.append(logRow(g.log[i++])); log.lastChild.scrollIntoView({ block: 'nearest' }); show(i); }, 260);
 }
 $('#mskip').addEventListener('click', () => M.finish && M.finish());
+$('#mshare').addEventListener('click', shareMatchup);
 // Betting view: cover and over/under chances for any line, read from the 100,000 simulated games
 function bettingView(A, H, rawM, totM, N, hw, aw) {
   const sched = D.games.find(g => g.hs == null && g.a === M.a && g.h === M.h && !!g.n === M.neutral);
