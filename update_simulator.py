@@ -158,7 +158,8 @@ def main():
                    "n": int(g.location != "Home"),
                    "as": None if pd.isna(g.away_score) else int(g.away_score),
                    "hs": None if pd.isna(g.home_score) else int(g.home_score),
-                   "sp": None if pd.isna(g.spread_line) else float(g.spread_line)} for _, g in s.iterrows()],
+                   "sp": None if pd.isna(g.spread_line) else float(g.spread_line),
+                   "tl": None if pd.isna(g.total_line) else float(g.total_line)} for _, g in s.iterrows()],
     }
 
     with open(a.html, encoding="utf-8") as f:
